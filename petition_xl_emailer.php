@@ -24,17 +24,12 @@ defined( 'ABSPATH' ) or exit;
 global $pxe_db_version;
 $pxe_db_version = '1.0';
 
-// TODO rename everything to prefix with plugin initials
-// enqueue scripts and styles
-add_action( 'wp_enqueue_scripts', 'pxe_enqueue_scripts' );
-add_action( 'wp_enqueue_scripts', 'pxe_enqueue_styles' );
-// TODO better naming
-// add ajax handling
+
+// WP ajax hooks attached to form submission
 add_action( 'wp_ajax_nopriv_pxe_main_process_async', 'pxe_main_process' );
 add_action( 'wp_ajax_pxe_main_process_async', 'pxe_main_process' );
-// shortcode
-add_shortcode('show_pxe_form', 'pxe_create_form');
-// plugin activation 
+
+// plugin activation hooks
 register_activation_hook( __FILE__, 'pxe_install' );
 register_activation_hook( __FILE__, 'pxe_install_data' );
 
@@ -256,7 +251,8 @@ function pxe_get_template_email( $messages, $username ) {
 	$message = $message . "<p>Sent at: " . current_time( 'mysql' ) . "</p>";
 	return $message;
 }
-
+// enqueue scripts 
+add_action( 'wp_enqueue_scripts', 'pxe_enqueue_scripts' );
 function pxe_enqueue_scripts() {
 	if ( is_page( '14' ) ) {
 		wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
@@ -264,14 +260,16 @@ function pxe_enqueue_scripts() {
 	}
 }
 
+// enqueue styles
+add_action( 'wp_enqueue_scripts', 'pxe_enqueue_styles' );
 function pxe_enqueue_styles() {
 	if ( is_page( '14' ) ) {
 		wp_enqueue_style( 'style', plugins_url( '/style.css', __FILE__ ) );
 	}
 }
 
-
-// shortcode function to return the form HTML
+// shortcode for user input form
+add_shortcode('show_pxe_form', 'pxe_create_form');
 // TODO add custom input HTML structure
 function pxe_create_form(){
 ?>
