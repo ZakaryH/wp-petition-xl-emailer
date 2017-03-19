@@ -1,0 +1,90 @@
+.rep-petition-form textarea {
+	display: block;
+}
+
+.rep-petition-form label {
+	display: block;
+	margin-bottom: 10px;
+}
+.rep-petition-form .inline-label {
+	display: inline-block;
+}
+
+.rep-petition-form input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.rep-petition-form input[type="checkbox"] {
+	display: inline-block;
+	width: initial;
+}
+
+.rep-petition-form input[type="text"],
+.rep-petition-form input[type="email"] {
+	padding: 10px 15px;
+}
+
+#petition-error-div strong{
+	color: #f00;
+}
+
+.petition-message-display {
+    margin-bottom: 30px;
+}
+
+.form-group{
+	margin-bottom: 15px;
+}
+
+#rep-info-display {
+	display: none;
+}
+
+.rep-photo {
+	display: inline-block;
+	border-radius: 50%;
+	width: 64px;
+	height: 64px;
+}
+
+.rep-petition-form {
+	position: relative;
+	padding: 30px;
+}
+.rep-petition-form .btn-block{
+	padding: 10px 15px;
+	border: 1px solid transparent;
+	display: inline-block;
+	transition: 300ms;
+}
+.rep-petition-form .btn-block:disabled{
+	background: #999;
+}
+.rep-petition-form .btn-block:disabled:hover{
+	cursor: not-allowed;
+}
+.rep-petition-form .btn-block:hover{
+	cursor: pointer;
+}
+.load-container {
+    position: absolute;
+    right: 50%;
+    bottom: 50%;
+    transform: translateX(50%) translateY(50%);
+}
+.load-spinner {
+	display: block;
+    border: 16px solid #f3f3f3; /* Light grey */
+    border-top: 16px solid #3498db; /* Blue */
+    border-radius: 50%;
+    background: rgba(0,0,0,0.33);
+    width: 100px;
+    height: 100px;
+    animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
