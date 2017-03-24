@@ -39,28 +39,47 @@ function pxe_install() {
 	global $wpdb;
 	global $pxe_db_version;
 
-	$table_name = $wpdb->prefix . 'pxe_users';
-	$table_name_two = $wpdb->prefix . 'pxe_reps';
+	$table_name = $wpdb->prefix . 'pxe_petitioners';
+	$table_name_two = $wpdb->prefix . 'pxe_representatives';
 	
 	$charset_collate = $wpdb->get_charset_collate();
 
 	$sql = "CREATE TABLE $table_name (
-		id mediumint(9) NOT NULL AUTO_INCREMENT,
-		time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
-		name tinytext NOT NULL,
-		text text NOT NULL,
-		url varchar(55) DEFAULT '' NOT NULL,
-		PRIMARY KEY  (id)
+		p_id tinyint(11) NOT NULL AUTO_INCREMENT,
+		p_name varchar(255) NOT NULL,
+		region tinyint(11) NOT NULL,
+		new_entry tinyint(1) DEFAULT 1 NOT NULL,
+		message varchar(255) NOT NULL,
+		postal varchar(255) NOT NULL,
+		PRIMARY KEY  (p_id)
 	) $charset_collate;";
 
 	$sql2 = "CREATE TABLE $table_name_two (
-		id mediumint(9) NOT NULL AUTO_INCREMENT,
-		time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
-		name tinytext NOT NULL,
-		text text NOT NULL,
-		url varchar(55) DEFAULT '' NOT NULL,
-		PRIMARY KEY  (id)
+		rep_id mediumint(9) NOT NULL AUTO_INCREMENT,
+		rep_name varchar(255) NOT NULL,
+		region tinyint(11) NOT NULL,
+		elected_office varchar(255) NOT NULL,
+		email varchar(255) NOT NULL,
+		PRIMARY KEY  (rep_id)
 	) $charset_collate;";
+
+	// $sql = "CREATE TABLE $table_name (
+	// 	id mediumint(9) NOT NULL AUTO_INCREMENT,
+	// 	time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+	// 	name tinytext NOT NULL,
+	// 	text text NOT NULL,
+	// 	url varchar(55) DEFAULT '' NOT NULL,
+	// 	PRIMARY KEY  (id)
+	// ) $charset_collate;";
+
+	// $sql2 = "CREATE TABLE $table_name_two (
+	// 	id mediumint(9) NOT NULL AUTO_INCREMENT,
+	// 	time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
+	// 	name tinytext NOT NULL,
+	// 	text text NOT NULL,
+	// 	url varchar(55) DEFAULT '' NOT NULL,
+	// 	PRIMARY KEY  (id)
+	// ) $charset_collate;";
 
 	require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 	dbDelta( $sql );
@@ -73,7 +92,7 @@ function pxe_install_data() {
 	global $wpdb;
 	
 	$welcome_name = 'Mr. WordPress';
-	$welcome_text = 'Congratulations, you just completed the installation!';
+	$welcome_text = 'This is a new string please work!';
 	
 	$table_name = $wpdb->prefix . 'pxe_users';
 	
@@ -275,7 +294,7 @@ function pxe_create_form(){
 ?>
 <form class="rep-petition-form">
 	<div class="load-container"></div>
-	<div class="form-half">
+	<div class="form-half first-half">
 		<div class="form-group">
 			<label for="user_name">Name</label>
 			<input class="form-control" type="text" id="user_name" name="user_name" autocomplete="off" placeholder="Your name">
@@ -290,7 +309,7 @@ function pxe_create_form(){
 		</div>
 		<input type="submit" value="Submit" class="btn btn-warning btn-block">
 	</div>
-	<div class="form-half">
+	<div class="form-half second-half">
 		<h4>I Support...</h4>
 		<div class="form-group">
 			<input checked="true" type="checkbox" id="template_message_one" value="msg_1" data-msg="Edmonton has a successful Professional Soccer Club called FC Edmonton founded in 2010, by Tom and Dave Fath. They have coordinated important events for our city including a memorial for Constable Daniel Woodall (a big soccer fan).  Their logo was designed with Edmonton colors in mind, and play in an Edmonton Eskimos branded facility.  We believe they need more support to be as successful as they should be in our sports crazy city.">

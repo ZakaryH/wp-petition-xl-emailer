@@ -118,7 +118,7 @@ function showResults (repsData) {
   for( var j=0; j<repsData.length; j++ ){
       display.append( "<div class='representative-info rep-" + ( j +1 ) + "'>" );
       var innerDisplay = jQuery( ".rep-" + ( j+1 ) );
-      innerDisplay.append( "<img src='" + repsData[j].photo_url + "' class='rep-photo' alt='" + repsData[j].name + "'>" );
+      innerDisplay.append( "<div class='rep-photo-container'><img src='" + repsData[j].photo_url + "' class='rep-photo' alt='" + repsData[j].name + "'></div>" );
       innerDisplay.append( "<p class='rep-name'>" + repsData[j].name + "</p>");
       innerDisplay.append( "<p class='rep-position'>" + repsData[j].elected_office + "</p>");
       innerDisplay.append( "<p class='rep-email'>" + repsData[j].email + "</p>");
