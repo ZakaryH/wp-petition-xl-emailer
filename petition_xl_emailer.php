@@ -24,18 +24,36 @@ defined( 'ABSPATH' ) or exit;
 global $pxe_db_version;
 $pxe_db_version = '1.0';
 
+// enqueue scripts 
+add_action( 'wp_enqueue_scripts', 'pxe_enqueue_scripts' );
+function pxe_enqueue_scripts() {
+	if ( is_page( '14' ) ) {
+		wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
+
+	}
+}
+
+// enqueue styles
+add_action( 'wp_enqueue_scripts', 'pxe_enqueue_styles' );
+function pxe_enqueue_styles() {
+	if ( is_page( '14' ) ) {
+		wp_enqueue_style( 'style', plugins_url( '/style.css', __FILE__ ) );
+	}
+}
 
 // WP ajax hooks attached to form submission
 add_action( 'wp_ajax_nopriv_pxe_main_process_async', 'pxe_main_process' );
 add_action( 'wp_ajax_pxe_main_process_async', 'pxe_main_process' );
 
 // plugin activation hooks
-register_activation_hook( __FILE__, 'pxe_install' );
-register_activation_hook( __FILE__, 'pxe_install_data' );
+register_activation_hook( __FILE__, 'pxe_activation' );
+// register_activation_hook( __FILE__, 'pxe_install_data' );
+
 
 // TODO totally reformat these tables
 // think about what data they need to hold and interact with each other
-function pxe_install() {
+// initialize necessary plugin tables, and add CRON event
+function pxe_activation() {
 	global $wpdb;
 	global $pxe_db_version;
 
@@ -63,51 +81,81 @@ function pxe_install() {
 		PRIMARY KEY  (rep_id)
 	) $charset_collate;";
 
-	// $sql = "CREATE TABLE $table_name (
-	// 	id mediumint(9) NOT NULL AUTO_INCREMENT,
-	// 	time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
-	// 	name tinytext NOT NULL,
-	// 	text text NOT NULL,
-	// 	url varchar(55) DEFAULT '' NOT NULL,
-	// 	PRIMARY KEY  (id)
-	// ) $charset_collate;";
-
-	// $sql2 = "CREATE TABLE $table_name_two (
-	// 	id mediumint(9) NOT NULL AUTO_INCREMENT,
-	// 	time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
-	// 	name tinytext NOT NULL,
-	// 	text text NOT NULL,
-	// 	url varchar(55) DEFAULT '' NOT NULL,
-	// 	PRIMARY KEY  (id)
-	// ) $charset_collate;";
-
 	require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 	dbDelta( $sql );
 	dbDelta( $sql2 );
 
 	add_option( 'pxe_db_version', $pxe_db_version );
+
+	// add the cron task
+	if (! wp_next_scheduled( 'pxe_weekly_event'  )) {
+		wp_schedule_event( time(), '5min', 'pxe_weekly_event' );
+	}
 }
 
-function pxe_install_data() {
-	global $wpdb;
-	
-	$welcome_name = 'Mr. WordPress';
-	$welcome_text = 'This is a new string please work!';
-	
-	$table_name = $wpdb->prefix . 'pxe_users';
-	
-	$wpdb->insert( 
-		$table_name, 
-		array( 
-			'time' => current_time( 'mysql' ), 
-			'name' => $welcome_name, 
-			'text' => $welcome_text, 
-		) 
-	);
+// add new time intervals (FOR TESTING)
+function pxe_cron_schedule_beta($schedules){
+    if(!isset($schedules["5min"])){
+        $schedules["5min"] = array(
+            'interval' => 5*60,
+            'display' => __('Once every 5 minutes'));
+    }
+    if(!isset($schedules["30min"])){
+        $schedules["30min"] = array(
+            'interval' => 30*60,
+            'display' => __('Once every 30 minutes'));
+    }
+    return $schedules;
 }
+add_filter('cron_schedules','pxe_cron_schedule_beta');
+
+// add the cron process
+add_action( 'pxe_weekly_event', 'pxe_cron_process' );
+
+// clear plugin CRON event on deactivation
+register_deactivation_hook( __FILE__, 'pxe_deactivation' );
+
+function pxe_deactivation() {
+	wp_clear_scheduled_hook( 'pxe_weekly_event' );
+}
+
+// the actual script executed by CRON (wp-cron)
+function pxe_cron_process() {
+	/* NOTE dependency on another plugin such as wp-mailfrom-ii
+		due to an issue with WP Mail and CRON, causing the "from" domain
+		or SERVER_NAME to be undefined when called with true CRON
+	*/
+	$to = 'yegfootball@gmail.com';
+	$subject = 'YEG Soccer Petition';
+	$body = '<b>This message sent hourly by WP CRON</b>';
+	$headers[] = 'Content-Type: text/html';
+	$headers[] = 'charset=UTF-8';
+	wp_mail( $to, $subject, $body, $headers );
+}
+
+// initialize data
+// not really needed, mostly for testing
+// function pxe_install_data() {
+// 	global $wpdb;
+	
+// 	$welcome_name = 'Mr. WordPress';
+// 	$welcome_text = 'This is a new string please work!';
+	
+// 	$table_name = $wpdb->prefix . 'pxe_users';
+	
+// 	$wpdb->insert( 
+// 		$table_name, 
+// 		array( 
+// 			'time' => current_time( 'mysql' ), 
+// 			'name' => $welcome_name, 
+// 			'text' => $welcome_text, 
+// 		) 
+// 	);
+// }
 
 // TODO rename or split up functionality
 // right now this does way too much, hard to see what's going on
+// main script called by the AJAX submission of plugin form
 function pxe_main_process() {
 	$data = array();
 	// TODO sanitize
@@ -140,6 +188,8 @@ function pxe_main_process() {
 	die();	
 }
 
+// use Google maps API to geocode postal code
+// returns assoc array containing longitude and latitude
 function pxe_get_geo_coords ( $postal_code ) {
 	$url = 'https://maps.googleapis.com/maps/api/geocode/json?components=postal_code:' . $postal_code;
 	
@@ -225,7 +275,6 @@ function pxe_send_email( $rep_set, $messages, $username ) {
 
 		// $headers = array( 'Content-Type: text/html; charset=UTF-8; Cc: zakhughesweb@gmail.com;' );
 		
-		add_filter( 'wp_mail_from_name', "Steve Jobs");
 		// TODO swap to use PHPMailer instead of the php mail
 		// attachments etc.
 		wp_mail( $to, $subject, $body, $headers );
@@ -269,22 +318,6 @@ function pxe_get_template_email( $messages, $username ) {
 	}
 	$message = $message . "<p>Sent at: " . current_time( 'mysql' ) . "</p>";
 	return $message;
-}
-// enqueue scripts 
-add_action( 'wp_enqueue_scripts', 'pxe_enqueue_scripts' );
-function pxe_enqueue_scripts() {
-	if ( is_page( '14' ) ) {
-		wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
-
-	}
-}
-
-// enqueue styles
-add_action( 'wp_enqueue_scripts', 'pxe_enqueue_styles' );
-function pxe_enqueue_styles() {
-	if ( is_page( '14' ) ) {
-		wp_enqueue_style( 'style', plugins_url( '/style.css', __FILE__ ) );
-	}
 }
 
 // shortcode for user input form
