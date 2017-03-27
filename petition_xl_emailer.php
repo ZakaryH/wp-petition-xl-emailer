@@ -24,16 +24,19 @@ defined( 'ABSPATH' ) or exit;
 global $pxe_db_version;
 $pxe_db_version = '1.0';
 
-// enqueue scripts 
+/* 
+* enqueue scripts
+*/
 add_action( 'wp_enqueue_scripts', 'pxe_enqueue_scripts' );
 function pxe_enqueue_scripts() {
 	if ( is_page( '14' ) ) {
 		wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
-
 	}
 }
 
-// enqueue styles
+/* 
+* enqueue styles
+*/
 add_action( 'wp_enqueue_scripts', 'pxe_enqueue_styles' );
 function pxe_enqueue_styles() {
 	if ( is_page( '14' ) ) {
@@ -49,10 +52,9 @@ add_action( 'wp_ajax_pxe_main_process_async', 'pxe_main_process' );
 register_activation_hook( __FILE__, 'pxe_activation' );
 // register_activation_hook( __FILE__, 'pxe_install_data' );
 
-
-// TODO totally reformat these tables
-// think about what data they need to hold and interact with each other
-// initialize necessary plugin tables, and add CRON event
+/* 
+* initialize necessary plugin tables, and CRON event
+*/
 function pxe_activation() {
 	global $wpdb;
 	global $pxe_db_version;
@@ -62,6 +64,7 @@ function pxe_activation() {
 	
 	$charset_collate = $wpdb->get_charset_collate();
 
+	// TODO varchar for region, make it an array or 3 columns specific to each rep type
 	$sql = "CREATE TABLE $table_name (
 		p_id tinyint(11) NOT NULL AUTO_INCREMENT,
 		p_name varchar(255) NOT NULL,
@@ -72,6 +75,7 @@ function pxe_activation() {
 		PRIMARY KEY  (p_id)
 	) $charset_collate;";
 
+	// TODO varchar for region, also rename it to district_name
 	$sql2 = "CREATE TABLE $table_name_two (
 		rep_id mediumint(9) NOT NULL AUTO_INCREMENT,
 		rep_name varchar(255) NOT NULL,
@@ -112,9 +116,11 @@ add_filter('cron_schedules','pxe_cron_schedule_beta');
 // add the cron process
 add_action( 'pxe_weekly_event', 'pxe_cron_process' );
 
-// clear plugin CRON event on deactivation
+// register plugin deactivation function
 register_deactivation_hook( __FILE__, 'pxe_deactivation' );
 
+// clear plugin CRON event on deactivation
+// TODO delete tables on deactivation too?
 function pxe_deactivation() {
 	wp_clear_scheduled_hook( 'pxe_weekly_event' );
 }
@@ -122,8 +128,8 @@ function pxe_deactivation() {
 // the actual script executed by CRON (wp-cron)
 function pxe_cron_process() {
 	/* NOTE dependency on another plugin such as wp-mailfrom-ii
-		due to an issue with WP Mail and CRON, causing the "from" domain
-		or SERVER_NAME to be undefined when called with true CRON
+	*	due to an issue with WP Mail and CRON, causing the "from" domain
+	*	or SERVER_NAME to be undefined when called with true CRON
 	*/
 	$to = 'yegfootball@gmail.com';
 	$subject = 'YEG Soccer Petition';
@@ -159,6 +165,7 @@ function pxe_cron_process() {
 function pxe_main_process() {
 	$data = array();
 	// TODO sanitize
+	// strip tags, check postal format & email format?
 	$postal_code = $_POST['postalCode'];
 	$user_email = $_POST['email'];
 	$user_name = $_POST['name'];
@@ -184,7 +191,13 @@ function pxe_main_process() {
 	// prepare the output
 	$output = array_values( $rep_set );
 	echo json_encode($output);
-	pxe_write_to_table( $user_name, $postal_code );
+	// write both the user and all 3 reps to table
+	// TODO need to pass the region for this petitioner, grab that from the rep_set
+	pxe_insert_petitioner( $user_name, $postal_code, $user_email, $user_messages );
+	// working, but need to iron out the REPLACE vs INSERT vs EXISTS logic
+	// foreach ($rep_set as $rep_data) {
+	// 	pxe_insert_representative( $rep_data );
+	// }
 	die();	
 }
 
@@ -228,23 +241,38 @@ function pxe_get_reps ( $lat, $long ) {
 		}
 	});
 }
-// Cron job in here?
 
-// write user and rep info to table(s)
-function pxe_write_to_table ( $name, $postal_code ) {
+// write petitioner info to table
+// TODO examine the district_name property of each rep, will need to use
+// probably have to make 1 or 3 new columns to hold the district information
+function pxe_insert_petitioner ( $name, $postal_code, $email, $messages ) {
 	global $wpdb;
-	
-	$welcome_name = $name;
-	$welcome_text = $postal_code;
-	
-	$table_name = $wpdb->prefix . 'pxe_users';
+	$comma_separated = implode(",", $messages);
+	$table_name = $wpdb->prefix . 'pxe_petitioners';
 	
 	$wpdb->insert( 
 		$table_name, 
 		array( 
-			'time' => current_time( 'mysql' ), 
-			'name' => $welcome_name, 
-			'text' => $welcome_text, 
+			'p_name' => $name, 
+			'region' => 4, 
+			'message' => $comma_separated, 
+			'postal' => $postal_code 
+		) 
+	);
+}
+
+// write representative info to table, using replace
+function pxe_insert_representative ( $rep_data ) {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'pxe_representatives';
+	
+	$wpdb->replace( 
+		$table_name, 
+		array( 
+			'rep_name' => $rep_data['name'], 
+			'region' => $rep_data['district_name'], 
+			'elected_office' => $rep_data['elected_office'], 
+			'email' => $rep_data['email'] 
 		) 
 	);
 }
