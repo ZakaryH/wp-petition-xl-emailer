@@ -163,6 +163,17 @@ function pxe_cron_process() {
 // 	);
 // }
 
+// for multidimensional arrays using recursion
+function in_array_r($needle, $haystack, $strict = false) {
+    foreach ($haystack as $item) {
+        if (($strict ? $item === $needle : $item == $needle) || (is_array($item) && in_array_r($needle, $item, $strict))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // TODO rename or split up functionality
 // right now this does way too much, hard to see what's going on
 // main script called by the AJAX submission of plugin form
@@ -170,6 +181,7 @@ function pxe_main_process() {
 	// TODO sanitize
 	// strip tags, check postal format & email format?
 	$_POST['name'] = strip_tags($_POST['name']);
+	$_POST['postalCode'] = strip_tags($_POST['postalCode']);
 
 	$petitioner_data = array(
 		'postal_code' => $_POST['postalCode'],
@@ -188,10 +200,8 @@ function pxe_main_process() {
 	// prepare the output
 	$output = array_values( $rep_set );
 	echo json_encode($output);
-	// write both the user and all 3 reps to table
-	// TODO need to pass the region for this petitioner, grab that from the rep_set
+
 	pxe_insert_petitioner( $petitioner_data );
-	// working, but need to iron out the REPLACE vs INSERT vs EXISTS logic
 	foreach ($rep_set as $rep_data) {
 		pxe_insert_representative( $rep_data );
 	}
