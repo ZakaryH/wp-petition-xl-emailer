@@ -59,30 +59,34 @@ function pxe_activation() {
 	global $wpdb;
 	global $pxe_db_version;
 
-	$table_name = $wpdb->prefix . 'pxe_petitioners';
-	$table_name_two = $wpdb->prefix . 'pxe_representatives';
+	$table_name = $wpdb->prefix . 'pxe_petitioners_newer';
+	$table_name_two = $wpdb->prefix . 'pxe_representatives_newer';
 	
 	$charset_collate = $wpdb->get_charset_collate();
 
-	// TODO varchar for region, make it an array or 3 columns specific to each rep type
 	$sql = "CREATE TABLE $table_name (
 		p_id tinyint(11) NOT NULL AUTO_INCREMENT,
 		p_name varchar(255) NOT NULL,
-		region tinyint(11) NOT NULL,
+		mp_district varchar(255) NOT NULL,
+		mla_district varchar(255) NOT NULL,
+		council_district varchar(255) NOT NULL,
 		new_entry tinyint(1) DEFAULT 1 NOT NULL,
 		message varchar(255) NOT NULL,
 		postal varchar(255) NOT NULL,
 		PRIMARY KEY  (p_id)
 	) $charset_collate;";
 
-	// TODO varchar for region, also rename it to district_name
+	// TODO look at the rep_id, it's not really being used, and changes a lot
+	// the office_and_districts is unique, and sort of serves that purpose
 	$sql2 = "CREATE TABLE $table_name_two (
 		rep_id mediumint(9) NOT NULL AUTO_INCREMENT,
+		office_and_district varchar(180) NOT NULL,
 		rep_name varchar(255) NOT NULL,
-		region tinyint(11) NOT NULL,
+		district_name varchar(255) NOT NULL,
 		elected_office varchar(255) NOT NULL,
 		email varchar(255) NOT NULL,
-		PRIMARY KEY  (rep_id)
+		PRIMARY KEY  (rep_id),
+		UNIQUE KEY office_and_district (office_and_district)
 	) $charset_collate;";
 
 	require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
@@ -163,41 +167,34 @@ function pxe_cron_process() {
 // right now this does way too much, hard to see what's going on
 // main script called by the AJAX submission of plugin form
 function pxe_main_process() {
-	$data = array();
 	// TODO sanitize
 	// strip tags, check postal format & email format?
-	$postal_code = $_POST['postalCode'];
-	$user_email = $_POST['email'];
-	$user_name = $_POST['name'];
-	// template needs to be an array of options
-	$user_messages = $_POST['messages'];
+	$_POST['name'] = strip_tags($_POST['name']);
 
+	$petitioner_data = array(
+		'postal_code' => $_POST['postalCode'],
+		'email' => $_POST['email'],
+		'name' => $_POST['name'],
+		'messages' => $_POST['messages'],
+		);
 
-	$location = pxe_get_geo_coords( $postal_code );
+	$location = pxe_get_geo_coords( $petitioner_data['postal_code'] );
 
 	// TODO make sure to be able to handle false case
 	$rep_set = pxe_get_reps( $location->lat, $location->lng );
-	// TODO INSERT to a table the POSTAL CODE, NAME, EMAIL, and use the rep info
-	// TODO send an email using specified template, and use the rep info 
-	// TODO if email fails, notify user
-	// if ( pxe_send_email( $rep_set ) ) {
-	// } else {
-	// 	echo json_encode( array(
-	// 		"error" => true,
-	// 		"msg" => "something went wrong"
-	// 		) );
-	// }
-	pxe_send_email( $rep_set, $user_messages, $user_name );
+	$petitioner_data = add_districts( $rep_set, $petitioner_data );
+
+	pxe_send_email( $rep_set, $petitioner_data );
 	// prepare the output
 	$output = array_values( $rep_set );
 	echo json_encode($output);
 	// write both the user and all 3 reps to table
 	// TODO need to pass the region for this petitioner, grab that from the rep_set
-	pxe_insert_petitioner( $user_name, $postal_code, $user_email, $user_messages );
+	pxe_insert_petitioner( $petitioner_data );
 	// working, but need to iron out the REPLACE vs INSERT vs EXISTS logic
-	// foreach ($rep_set as $rep_data) {
-	// 	pxe_insert_representative( $rep_data );
-	// }
+	foreach ($rep_set as $rep_data) {
+		pxe_insert_representative( $rep_data );
+	}
 	die();	
 }
 
@@ -242,39 +239,73 @@ function pxe_get_reps ( $lat, $long ) {
 	});
 }
 
+/*
+*
+*
+*/
+function add_districts ( $rep_set, $petitioner_data) {
+	foreach ( $rep_set as $rep_data ) {
+		$petitioner_data[$rep_data['elected_office']] = $rep_data['district_name'];
+	}
+
+	return $petitioner_data;
+}
+
 // write petitioner info to table
 // TODO examine the district_name property of each rep, will need to use
 // probably have to make 1 or 3 new columns to hold the district information
-function pxe_insert_petitioner ( $name, $postal_code, $email, $messages ) {
+function pxe_insert_petitioner ( $petitioner_data ) {
 	global $wpdb;
-	$comma_separated = implode(",", $messages);
-	$table_name = $wpdb->prefix . 'pxe_petitioners';
+	$comma_separated = implode(",", $petitioner_data['messages']);
+	$table_name = $wpdb->prefix . 'pxe_petitioners_newer';
 	
 	$wpdb->insert( 
 		$table_name, 
 		array( 
-			'p_name' => $name, 
-			'region' => 4, 
+			'p_name' => $petitioner_data['name'], 
+			'mp_district' => $petitioner_data['MP'], 
+			'mla_district' => $petitioner_data['MLA'], 
+			'council_district' => $petitioner_data['Councillor'], 
 			'message' => $comma_separated, 
-			'postal' => $postal_code 
+			'postal' => $petitioner_data['postal_code'] 
 		) 
 	);
 }
 
 // write representative info to table, using replace
+// TODO think if this is really that efficient
 function pxe_insert_representative ( $rep_data ) {
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'pxe_representatives';
+	$table_name = $wpdb->prefix . 'pxe_representatives_newer';
 	
 	$wpdb->replace( 
 		$table_name, 
 		array( 
 			'rep_name' => $rep_data['name'], 
-			'region' => $rep_data['district_name'], 
+			'district_name' => $rep_data['district_name'], 
+			'office_and_district' => $rep_data['elected_office'] . '-' . $rep_data['district_name'], 
 			'elected_office' => $rep_data['elected_office'], 
-			'email' => $rep_data['email'] 
+			'email' => $rep_data['email']
 		) 
-	);
+	);	
+
+	/* this is used to test a new rep replacing an old one
+	* they would have the same office and district, but different names etc.
+	* individually the office and district can be repeated, but the combination
+	* is unique
+	* not sure how great this setup is 
+	 */
+
+	// $wpdb->replace( 
+	// 	$table_name, 
+	// 	array( 
+	// 		'rep_name' => 'Joe Dirt', 
+	// 		'district_name' => 'Ward 8', 
+	// 		'office_and_district' => 'CouncillorWard 8', 
+	// 		'elected_office' => 'Councillor', 
+	// 		'email' => $rep_data['email']
+	// 	) 
+	// );
 }
 
 /*
@@ -283,9 +314,10 @@ function pxe_insert_representative ( $rep_data ) {
 * @return - TODO
 */
 // TODO look at making this reusable?
-function pxe_send_email( $rep_set, $messages, $username ) {
+function pxe_send_email( $rep_set, $petitioner_data ) {
 	// TODO possible implement interpolation to insert custom names
-	$message_template = pxe_get_template_email( $messages, $username );
+	$message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['name'] );
+
 	// send out 3 emails
 	foreach ($rep_set as $key => $value) {
 		$rep_email = $rep_set[$key]['email'];
