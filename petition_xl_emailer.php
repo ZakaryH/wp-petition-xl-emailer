@@ -180,12 +180,13 @@ function pxe_cron_process() {
 							break;
 						
 					}
+					// rep emails
 					$file_name = $district_type . "-" . $district_name;
 					$files_created[] = write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $file_name);
 
 					$to = 'yegfootball@gmail.com';
-					$subject = 'Representative Email';
-					$body = '<b>Hello Representative</b><p>Attached to this email is a list of persons in your constituency that support the YEG Soccer project.</p><p>New entries are at the top, and the messages correspond to...' . 'your email is ' . $emails[$email_index][0];
+					$subject = 'YEG Soccer Weekly Reminder';
+					$body = '<p>This is a reminder of the constituents in your area that have sent you an email of support for YEG Soccer in the past week, we have attached a file/image which shows historical and new supporters of YEG Soccer in your area.</p>';
 					$headers[] = 'Content-Type: text/html';
 					$headers[] = 'charset=UTF-8';
 					$mail_attachment = array( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $file_name . '.xlsx');
@@ -194,6 +195,20 @@ function pxe_cron_process() {
 				
 			}
 		}
+		// admin email
+		$to = 'yegfootball@gmail.com';
+		$subject = 'YEG Soccer New Weekly Petitioners';
+		$body = '<p>Attached are all the sheets for districts with new petitioners this week.</p>';
+		$headers[] = 'Content-Type: text/html';
+		$headers[] = 'charset=UTF-8';
+		// note this is plural
+		$mail_attachments = array();
+		// send all the new sheets with one email
+		foreach ($files_created as $created_file) {
+			$mail_attachments[] =  ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $created_file;
+		}
+		wp_mail( $to, $subject, $body, $headers, $mail_attachments );
+
 		pxe_update_petitioners();
 		pxe_clean_up_files( $files_created );
 	} else {
@@ -322,7 +337,10 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 	}
 	return $district_types;
 }
-
+/*
+* creates a sheet, writes the new entries first in bold, then the old ones - both must exist to get here, if no new it stops earlier
+* returns - string - name of the created file including the file extension (.xlxs)
+*/
 function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 	$new_style = array( 'font'=>'Arial','font-size'=>10,'font-style'=>'bold', 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
 	$old_style = array( 'font'=>'Arial','font-size'=>10, 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
@@ -566,7 +584,7 @@ function pxe_get_template_email( $messages, $username ) {
 	// ASKING FOR TROUBLE
 	// TODO implement HTML tags and formatting for the email and the template
 	// loop through the template id array and make a block of all the messages
-	$message = "<p>This email was sent to you by YEG Soccer on behalf of :" . $username . " that has identified they live in your constituency.</p>";
+	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $username that has identified they live in your constituency.</p>";
 	$message .= "<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>";
 
 	foreach ($messages as $msg_id) {
