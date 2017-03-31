@@ -23,6 +23,8 @@ defined( 'ABSPATH' ) or exit;
 
 global $pxe_db_version;
 $pxe_db_version = '1.0';
+include_once( ABSPATH . 'wp-content/plugins/petition_xl_emailer/PHP_XLSXWriter-master/xlsxwriter.class.php');
+
 
 /* 
 * enqueue scripts
@@ -131,37 +133,243 @@ function pxe_deactivation() {
 
 // the actual script executed by CRON (wp-cron)
 function pxe_cron_process() {
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'pxe_petitioners_newer';
 	/* NOTE dependency on another plugin such as wp-mailfrom-ii
 	*	due to an issue with WP Mail and CRON, causing the "from" domain
 	*	or SERVER_NAME to be undefined when called with true CRON
 	*/
-	$to = 'yegfootball@gmail.com';
-	$subject = 'YEG Soccer Petition';
-	$body = '<b>This message sent hourly by WP CRON</b>';
-	$headers[] = 'Content-Type: text/html';
-	$headers[] = 'charset=UTF-8';
-	wp_mail( $to, $subject, $body, $headers );
+	if ( pxe_new_exist() ) {
+		$files_created = array();
+		$districts_data = array(
+			"mp" => array(),
+			"mla" => array(),
+			"council" => array()
+			);
+		$results = $wpdb->get_results(
+			"
+			SELECT p_name, mp_district, mla_district, council_district, postal, message, new_entry 
+			FROM wp_pxe_petitioners_newer
+			", ARRAY_A
+		);
+
+		foreach ($results as $row) {
+			$districts_data = pxe_add_district_structure($districts_data, $row);
+			if ($row['new_entry'] == 1) {
+				$districts_data = pxe_add_writing_rows( $districts_data, $row, 'writing_rows_new' );
+			} else {
+				$districts_data = pxe_add_writing_rows( $districts_data, $row, 'writing_rows_old' );
+			}
+		}
+		$emails = pxe_get_rep_emails();
+		foreach ($districts_data as $district_type => $district) {
+			// iterate thru each district
+			foreach ($district as $district_name => $all_writing_rows) {
+				// only go through the process if that district has new petitioners
+				if ( count( $all_writing_rows['writing_rows_new'] ) > 0 ) {
+					// relies on the table names pretty heavily either way though
+					switch ($district_type) {
+						case 'council':
+							$email_index = "Councillor-$district_name";
+							break;
+						case 'mla':
+							$email_index = "MLA-$district_name";
+							break;
+						case 'mp':
+							$email_index = "MP-$district_name";
+							break;
+						
+					}
+					$files_created[] = write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $district_type . "-" . $district_name);
+					// $to = 'yegfootball@gmail.com';
+					// $subject = 'YEG Soccer Petition';
+					// $body = $emails[$email_index][0] . $district_type . " - " . $district_name ;
+					// $headers[] = 'Content-Type: text/html';
+					// $headers[] = 'charset=UTF-8';
+					// wp_mail( $to, $subject, $body, $headers );
+
+					// echo "email for rep of this district is: " . $emails[$email_index][0] . "<br>";
+					// write the sheets and make a list of the filenames + extension
+					// email the rep with the attachment, Note the name is returned above, but pretty easy to rebuild anyways
+					// email admin... either in this loop for a bunch, or outside the loop but in the IF to only do it once but with a ton of attachments
+				}
+				
+			}
+		}
+		echo "<pre>";
+		var_dump($districts_data);
+		var_dump($files_created);
+		echo "</pre>";
+
+
+	} else {
+		// no new petitioners at all, stop
+		exit();
+	}
+
 }
 
-// initialize data
-// not really needed, mostly for testing
-// function pxe_install_data() {
-// 	global $wpdb;
-	
-// 	$welcome_name = 'Mr. WordPress';
-// 	$welcome_text = 'This is a new string please work!';
-	
-// 	$table_name = $wpdb->prefix . 'pxe_users';
-	
-// 	$wpdb->insert( 
-// 		$table_name, 
-// 		array( 
-// 			'time' => current_time( 'mysql' ), 
-// 			'name' => $welcome_name, 
-// 			'text' => $welcome_text, 
-// 		) 
-// 	);
-// }
+// check if any new petitioners
+function pxe_new_exist () {
+	global $wpdb;
+	$new_true = 1;
+
+	$new_results = $wpdb->get_col( $wpdb->prepare(
+		"
+		SELECT wp_pxe_petitioners_newer.new_entry 
+		FROM wp_pxe_petitioners_newer 
+		WHERE wp_pxe_petitioners_newer.new_entry = %d
+		",
+		$new_true	
+	) );
+
+	if ( $new_results ) {
+		if ( count($new_results) > 0 ) {
+			return true;
+		} else {
+			return false;
+		}
+	} else {
+		return false;
+	}
+}
+
+/*
+* Update the boolean new_entry column value to 0 (false) for all 1 (true) entries
+*/
+function update_petitioners () {
+	global $wpdb;
+	$old_bool = 0;
+
+	$wpdb->query( $wpdb->prepare(
+		"
+		UPDATE wp_pxe_petitioners_newer 
+		SET wp_pxe_petitioners_newer.new_entry = %d 
+		WHERE wp_pxe_petitioners_newer.new_entry = 1
+		",
+		$old_bool
+		) );
+}
+
+/*
+* @param filenames - array - list of files to delete, including the extension
+* return bool 
+*/
+function clean_up_files ( $filenames ) {
+	try {
+		foreach ($filenames as $filename) {
+			unlink( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $filename);
+		}
+	} catch (Exception $e) {
+		// maybe have a support function, to email admin as notification of failure?
+		// put it anywhere significant and pass along the exception information
+		return false;
+	}
+	return true;
+}
+
+// query to get rep info
+function pxe_get_rep_emails() {
+	global $wpdb;
+	$rep_emails = array();
+
+	$results = $wpdb->get_results(
+		"
+		SELECT rep_name, email, district_name, elected_office, office_and_district 
+		FROM wp_pxe_representatives_newer
+		", ARRAY_A
+	);
+	$num_rows = $wpdb->num_rows;
+	if ($num_rows === 0) {
+		// no reps found
+		return false;
+	} else {
+		foreach ($results as $rep_row) {
+			$rep_emails[ $rep_row['office_and_district'] ][] = $rep_row['email'];
+		}
+	}
+	return $rep_emails;
+}
+
+
+// push multiple arrays into their district types (mla, mp, council)
+// checks if the name has already exists as a key of that district type specifically (same name can be used for different types)
+// each name is pushed to the type, each district name is a new array
+// which then contains 2 more arrays of both old and new writing rows (petitioner data is also an array)
+// returns a multi dimensional (nested) associative array
+function pxe_add_district_structure( $district_types, $petitioner_data ) {
+	foreach ( $district_types as $dist_type => $district ) {
+		// add the structure for a district if that district isn't already in the district_types array
+		if ( !array_key_exists( $petitioner_data[$dist_type . '_district'], $district_types[$dist_type] ) ) {
+			$district_types[$dist_type] = array_merge( $district_types[$dist_type], array( $petitioner_data[$dist_type . '_district'] => array(
+			"writing_rows_new" => array(),
+			"writing_rows_old" => array()
+			) ) );
+		}
+	}
+	return $district_types;
+}
+
+// add the old and new writings rows to the containing object
+function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
+	foreach ($district_types as $dist_type => $district) {
+		// TODO this is only going to be false if two people live in the same district and have the same name
+		// is that even a problem? Not really
+		if (!in_array_r($petitioner['p_name'], $district_types[$dist_type][$petitioner[$dist_type . '_district']])) {
+			// push each "new" petitioner to the "writing_rows_new" for each of their district_types
+			$district_types[$dist_type][$petitioner[$dist_type . '_district']][$rows_age][] = array(
+				"name" => $petitioner['p_name'],
+				"mla_district" => $petitioner['mla_district'],
+				"mp_district" => $petitioner['mp_district'],
+				"council_district" => $petitioner['council_district'],
+				"message" => $petitioner['message']
+			);
+		}
+	}
+	return $district_types;
+}
+
+function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
+	$new_style = array( 'font'=>'Arial','font-size'=>10,'font-style'=>'bold', 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
+	$old_style = array( 'font'=>'Arial','font-size'=>10, 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
+	$header = array(
+		'Name' => 'string',
+		'MLA District' => 'string',
+		'MP District' => 'string',
+		'Council District' => 'string',
+		'Messages' => 'string'
+	);
+	$writer = new XLSXWriter();
+
+	$writer->writeSheetHeader('Sheet1', $header);
+
+	$writer->writeSheetRow('Sheet1', array(
+		'New Petitioners'
+	));
+	foreach ($writing_rows_new as $write_row) {
+		$writer->writeSheetRow('Sheet1', $write_row, $new_style);
+	}
+	$writer->writeSheetRow('Sheet1', array(
+		'Archived Petitioners'
+	));
+	foreach ($writing_rows_old as $write_row) {
+		$writer->writeSheetRow('Sheet1', $write_row, $old_style);
+	}
+	try {
+		$writer->writeToFile( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $filename . '.xlsx');
+	} catch (Exception $e) {
+		$to = 'yegfootball@gmail.com';
+		$subject = 'YEG Soccer Petition';
+		$body = "Error: " . $e->getMessage() ;
+		$headers[] = 'Content-Type: text/html';
+		$headers[] = 'charset=UTF-8';
+		wp_mail( $to, $subject, $body, $headers );
+		// echo $e;	
+	}
+
+	return $filename . '.xlsx';
+}
+
 
 // for multidimensional arrays using recursion
 function in_array_r($needle, $haystack, $strict = false) {
@@ -324,6 +532,7 @@ function pxe_insert_representative ( $rep_data ) {
 * @return - TODO
 */
 // TODO look at making this reusable?
+// make it usable for 1st email, second email, admin email and error email?
 function pxe_send_email( $rep_set, $petitioner_data ) {
 	// TODO possible implement interpolation to insert custom names
 	$message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['name'] );
