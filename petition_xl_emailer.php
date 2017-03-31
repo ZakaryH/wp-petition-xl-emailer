@@ -180,28 +180,22 @@ function pxe_cron_process() {
 							break;
 						
 					}
-					$files_created[] = write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $district_type . "-" . $district_name);
-					// $to = 'yegfootball@gmail.com';
-					// $subject = 'YEG Soccer Petition';
-					// $body = $emails[$email_index][0] . $district_type . " - " . $district_name ;
-					// $headers[] = 'Content-Type: text/html';
-					// $headers[] = 'charset=UTF-8';
-					// wp_mail( $to, $subject, $body, $headers );
+					$file_name = $district_type . "-" . $district_name;
+					$files_created[] = write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $file_name);
 
-					// echo "email for rep of this district is: " . $emails[$email_index][0] . "<br>";
-					// write the sheets and make a list of the filenames + extension
-					// email the rep with the attachment, Note the name is returned above, but pretty easy to rebuild anyways
-					// email admin... either in this loop for a bunch, or outside the loop but in the IF to only do it once but with a ton of attachments
+					$to = 'yegfootball@gmail.com';
+					$subject = 'Representative Email';
+					$body = '<b>Hello Representative</b><p>Attached to this email is a list of persons in your constituency that support the YEG Soccer project.</p><p>New entries are at the top, and the messages correspond to...' . 'your email is ' . $emails[$email_index][0];
+					$headers[] = 'Content-Type: text/html';
+					$headers[] = 'charset=UTF-8';
+					$mail_attachment = array( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $file_name . '.xlsx');
+					wp_mail( $to, $subject, $body, $headers, $mail_attachment );
 				}
 				
 			}
 		}
-		echo "<pre>";
-		var_dump($districts_data);
-		var_dump($files_created);
-		echo "</pre>";
-
-
+		pxe_update_petitioners();
+		pxe_clean_up_files( $files_created );
 	} else {
 		// no new petitioners at all, stop
 		exit();
@@ -237,7 +231,7 @@ function pxe_new_exist () {
 /*
 * Update the boolean new_entry column value to 0 (false) for all 1 (true) entries
 */
-function update_petitioners () {
+function pxe_update_petitioners () {
 	global $wpdb;
 	$old_bool = 0;
 
@@ -255,7 +249,7 @@ function update_petitioners () {
 * @param filenames - array - list of files to delete, including the extension
 * return bool 
 */
-function clean_up_files ( $filenames ) {
+function pxe_clean_up_files ( $filenames ) {
 	try {
 		foreach ($filenames as $filename) {
 			unlink( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $filename);
