@@ -25,34 +25,21 @@ global $pxe_db_version;
 $pxe_db_version = '1.0';
 include_once( ABSPATH . 'wp-content/plugins/petition_xl_emailer/PHP_XLSXWriter-master/xlsxwriter.class.php');
 
-
-/* 
-* enqueue scripts
-*/
-add_action( 'wp_enqueue_scripts', 'pxe_enqueue_scripts' );
-function pxe_enqueue_scripts() {
-	if ( is_page( '14' ) ) {
-		wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
-	}
-}
+// TODO swap out ABSPATH fot plugins_url() or plugin_dir_path()
+// TODO use $wpdb->prefix instead of hardcoding wp_... {$wpdb->prefix_}_posts
 
 /* 
 * enqueue styles
 */
 add_action( 'wp_enqueue_scripts', 'pxe_enqueue_styles' );
 function pxe_enqueue_styles() {
-	if ( is_page( '14' ) ) {
+	// if ( is_page( '14' ) ) {
 		wp_enqueue_style( 'style', plugins_url( '/style.css', __FILE__ ) );
-	}
+	// }
 }
-
-// WP ajax hooks attached to form submission
-add_action( 'wp_ajax_nopriv_pxe_main_process_async', 'pxe_main_process' );
-add_action( 'wp_ajax_pxe_main_process_async', 'pxe_main_process' );
 
 // plugin activation hooks
 register_activation_hook( __FILE__, 'pxe_activation' );
-// register_activation_hook( __FILE__, 'pxe_install_data' );
 
 /* 
 * initialize necessary plugin tables, and CRON event
@@ -119,17 +106,54 @@ function pxe_cron_schedule_beta($schedules){
 }
 add_filter('cron_schedules','pxe_cron_schedule_beta');
 
-// add the cron process
-add_action( 'pxe_weekly_event', 'pxe_cron_process' );
 
 // register plugin deactivation function
 register_deactivation_hook( __FILE__, 'pxe_deactivation' );
 
 // clear plugin CRON event on deactivation
-// TODO delete tables on deactivation too?
 function pxe_deactivation() {
 	wp_clear_scheduled_hook( 'pxe_weekly_event' );
 }
+
+// WP ajax hooks attached to form submission
+add_action( 'wp_ajax_nopriv_pxe_main_process_async', 'pxe_main_process' );
+add_action( 'wp_ajax_pxe_main_process_async', 'pxe_main_process' );
+
+// main script called by the AJAX submission of plugin form
+function pxe_main_process() {
+	// TODO sanitize
+	// TODO add error handling for bad data (echo something and receive it on client side)
+	// strip tags, check postal format & email format?
+	$_POST['name'] = strip_tags($_POST['name']);
+	$_POST['postalCode'] = strip_tags($_POST['postalCode']);
+
+	$petitioner_data = array(
+		'postal_code' => $_POST['postalCode'],
+		'email' => $_POST['email'],
+		'name' => $_POST['name'],
+		'messages' => $_POST['messages'],
+		);
+
+	$location = pxe_get_geo_coords( $petitioner_data['postal_code'] );
+
+	// TODO make sure to be able to handle false case
+	$rep_set = pxe_get_reps( $location->lat, $location->lng );
+	$petitioner_data = add_districts( $rep_set, $petitioner_data );
+
+	pxe_send_email( $rep_set, $petitioner_data );
+	// prepare the output
+	$output = array_values( $rep_set );
+	echo json_encode($output);
+
+	pxe_insert_petitioner( $petitioner_data );
+	foreach ($rep_set as $rep_data) {
+		pxe_insert_representative( $rep_data );
+	}
+	die();	
+}
+
+// add the cron process
+add_action( 'pxe_weekly_event', 'pxe_cron_process' );
 
 // the actual script executed by CRON (wp-cron)
 function pxe_cron_process() {
@@ -301,11 +325,11 @@ function pxe_get_rep_emails() {
 }
 
 
-// push multiple arrays into their district types (mla, mp, council)
-// checks if the name has already exists as a key of that district type specifically (same name can be used for different types)
-// each name is pushed to the type, each district name is a new array
-// which then contains 2 more arrays of both old and new writing rows (petitioner data is also an array)
-// returns a multi dimensional (nested) associative array
+/*
+* @param district_types - multidimensional array - initial structure of 3 associative arrays for types
+* @parm petitioner_data - associative array - a single petitioner's table data
+* returns - multidimensional array
+*/
 function pxe_add_district_structure( $district_types, $petitioner_data ) {
 	foreach ( $district_types as $dist_type => $district ) {
 		// add the structure for a district if that district isn't already in the district_types array
@@ -392,40 +416,6 @@ function in_array_r($needle, $haystack, $strict = false) {
     }
 
     return false;
-}
-
-// TODO rename or split up functionality
-// right now this does way too much, hard to see what's going on
-// main script called by the AJAX submission of plugin form
-function pxe_main_process() {
-	// TODO sanitize
-	// strip tags, check postal format & email format?
-	$_POST['name'] = strip_tags($_POST['name']);
-	$_POST['postalCode'] = strip_tags($_POST['postalCode']);
-
-	$petitioner_data = array(
-		'postal_code' => $_POST['postalCode'],
-		'email' => $_POST['email'],
-		'name' => $_POST['name'],
-		'messages' => $_POST['messages'],
-		);
-
-	$location = pxe_get_geo_coords( $petitioner_data['postal_code'] );
-
-	// TODO make sure to be able to handle false case
-	$rep_set = pxe_get_reps( $location->lat, $location->lng );
-	$petitioner_data = add_districts( $rep_set, $petitioner_data );
-
-	pxe_send_email( $rep_set, $petitioner_data );
-	// prepare the output
-	$output = array_values( $rep_set );
-	echo json_encode($output);
-
-	pxe_insert_petitioner( $petitioner_data );
-	foreach ($rep_set as $rep_data) {
-		pxe_insert_representative( $rep_data );
-	}
-	die();	
 }
 
 // use Google maps API to geocode postal code
@@ -546,7 +536,6 @@ function pxe_insert_representative ( $rep_data ) {
 // TODO look at making this reusable?
 // make it usable for 1st email, second email, admin email and error email?
 function pxe_send_email( $rep_set, $petitioner_data ) {
-	// TODO possible implement interpolation to insert custom names
 	$message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['name'] );
 
 	// send out 3 emails
@@ -554,17 +543,15 @@ function pxe_send_email( $rep_set, $petitioner_data ) {
 		$rep_email = $rep_set[$key]['email'];
 		$rep_name = $rep_set[$key]['name'];
 		$rep_office = $rep_set[$key]['elected_office'];
-		// TODO grab templates based on the user input
 		// send that template to the rep, which gets passed in
 		$to = 'yegfootball@gmail.com';
 		$subject = 'YEG Soccer Petition';
 		// $body = 'name: ' . $rep_name . ' email: ' . $rep_email . 'elected office: ' . $rep_office;
 		$body = $message_template;
 		$headers[] = 'Content-Type: text/html';
-		// $headers[] = 'Cc: zakhughesweb@gmail.com';
+		// $headers[] = 'Cc: same_ple_mail@mailinator.com';
 		$headers[] = 'charset=UTF-8';
-
-		// $headers = array( 'Content-Type: text/html; charset=UTF-8; Cc: zakhughesweb@gmail.com;' );
+		// $headers = array( 'Content-Type: text/html; charset=UTF-8; Cc: same_ple_mail@mailinator.com;' );
 		
 		// TODO swap to use PHPMailer instead of the php mail
 		// attachments etc.
@@ -615,6 +602,9 @@ function pxe_get_template_email( $messages, $username ) {
 add_shortcode('show_pxe_form', 'pxe_create_form');
 // TODO add custom input HTML structure
 function pxe_create_form(){
+	// enqueue script where the shortcode form appears
+	wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
+
 ?>
 <form class="rep-petition-form">
 	<div class="load-container"></div>
@@ -659,9 +649,6 @@ function pxe_create_form(){
 		</div>
 	</div>
 	<div id="petition-error-div"></div>
-<!-- 	<div class="form-submit-container">
-		<input type="submit" value="Submit" class="btn btn-warning btn-block">
-	</div> -->
 </form>
 <div id="rep-info-display" class="rep-petition-form">
 </div>
