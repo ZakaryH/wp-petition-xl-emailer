@@ -26,8 +26,6 @@ $pxe_db_version = '1.0';
 include_once( ABSPATH . 'wp-content/plugins/petition_xl_emailer/PHP_XLSXWriter-master/xlsxwriter.class.php');
 
 // TODO swap out ABSPATH fot plugins_url() or plugin_dir_path()
-// TODO use $wpdb->prefix instead of hardcoding wp_... {$wpdb->prefix_}_posts
-
 /* 
 * enqueue styles
 */
@@ -158,11 +156,9 @@ add_action( 'pxe_weekly_event', 'pxe_cron_process' );
 // the actual script executed by CRON (wp-cron)
 function pxe_cron_process() {
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'pxe_petitioners_newer';
-	/* NOTE dependency on another plugin such as wp-mailfrom-ii
-	*	due to an issue with WP Mail and CRON, causing the "from" domain
-	*	or SERVER_NAME to be undefined when called with true CRON
-	*/
+	// $table_name = $wpdb->prefix . 'pxe_petitioners_newer';
+
+	// proceed only if at least 1 new petitioner exists
 	if ( pxe_new_exist() ) {
 		$files_created = array();
 		$districts_data = array(
@@ -170,13 +166,14 @@ function pxe_cron_process() {
 			"mla" => array(),
 			"council" => array()
 			);
+
 		$results = $wpdb->get_results(
 			"
 			SELECT p_name, mp_district, mla_district, council_district, postal, message, new_entry 
-			FROM wp_pxe_petitioners_newer
+			FROM {$wpdb->prefix}pxe_petitioners_newer
 			", ARRAY_A
 		);
-
+		// create each disctrict's structure and populate it
 		foreach ($results as $row) {
 			$districts_data = pxe_add_district_structure($districts_data, $row);
 			if ($row['new_entry'] == 1) {
@@ -202,7 +199,6 @@ function pxe_cron_process() {
 						case 'mp':
 							$email_index = "MP-$district_name";
 							break;
-						
 					}
 					// rep emails
 					$file_name = $district_type . "-" . $district_name;
@@ -236,7 +232,7 @@ function pxe_cron_process() {
 		pxe_update_petitioners();
 		pxe_clean_up_files( $files_created );
 	} else {
-		// no new petitioners at all, stop
+		// no new petitioners
 		exit();
 	}
 
@@ -249,9 +245,9 @@ function pxe_new_exist () {
 
 	$new_results = $wpdb->get_col( $wpdb->prepare(
 		"
-		SELECT wp_pxe_petitioners_newer.new_entry 
-		FROM wp_pxe_petitioners_newer 
-		WHERE wp_pxe_petitioners_newer.new_entry = %d
+		SELECT {$wpdb->prefix}pxe_petitioners_newer.new_entry 
+		FROM {$wpdb->prefix}pxe_petitioners_newer 
+		WHERE {$wpdb->prefix}pxe_petitioners_newer.new_entry = %d
 		",
 		$new_true	
 	) );
@@ -276,9 +272,9 @@ function pxe_update_petitioners () {
 
 	$wpdb->query( $wpdb->prepare(
 		"
-		UPDATE wp_pxe_petitioners_newer 
-		SET wp_pxe_petitioners_newer.new_entry = %d 
-		WHERE wp_pxe_petitioners_newer.new_entry = 1
+		UPDATE {$wpdb->prefix}pxe_petitioners_newer 
+		SET {$wpdb->prefix}pxe_petitioners_newer.new_entry = %d 
+		WHERE {$wpdb->prefix}pxe_petitioners_newer.new_entry = 1
 		",
 		$old_bool
 		) );
@@ -309,7 +305,7 @@ function pxe_get_rep_emails() {
 	$results = $wpdb->get_results(
 		"
 		SELECT rep_name, email, district_name, elected_office, office_and_district 
-		FROM wp_pxe_representatives_newer
+		FROM {$wpdb->prefix}pxe_representatives_newer
 		", ARRAY_A
 	);
 	$num_rows = $wpdb->num_rows;
@@ -565,12 +561,6 @@ function pxe_send_email( $rep_set, $petitioner_data ) {
 */
 // return the template corresponding to the message id
 function pxe_get_template_email( $messages, $username ) {
-	// look to see what messages are selected, grab and return all the corresponding messages
-	// concatentate the messages for now?
-	// TODO MAKE THIS REFERENCE A TEMPLATE OR SOMETHING, DO NOT MAKE PEOPLE EDIT THIS
-	// ASKING FOR TROUBLE
-	// TODO implement HTML tags and formatting for the email and the template
-	// loop through the template id array and make a block of all the messages
 	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $username that has identified they live in your constituency.</p>";
 	$message .= "<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>";
 
