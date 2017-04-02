@@ -23,9 +23,8 @@ defined( 'ABSPATH' ) or exit;
 
 global $pxe_db_version;
 $pxe_db_version = '1.0';
-include_once( ABSPATH . 'wp-content/plugins/petition_xl_emailer/PHP_XLSXWriter-master/xlsxwriter.class.php');
+include_once( plugin_dir_path( __FILE__ ) . '/PHP_XLSXWriter-master/xlsxwriter.class.php');
 
-// TODO swap out ABSPATH fot plugins_url() or plugin_dir_path()
 /* 
 * enqueue styles
 */
@@ -209,7 +208,7 @@ function pxe_cron_process() {
 					$body = '<p>This is a reminder of the constituents in your area that have sent you an email of support for YEG Soccer in the past week, we have attached a file/image which shows historical and new supporters of YEG Soccer in your area.</p>';
 					$headers[] = 'Content-Type: text/html';
 					$headers[] = 'charset=UTF-8';
-					$mail_attachment = array( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $file_name . '.xlsx');
+					$mail_attachment = array( plugin_dir_path( __FILE__ ) . '/files/' . $file_name . '.xlsx');
 					wp_mail( $to, $subject, $body, $headers, $mail_attachment );
 				}
 				
@@ -225,7 +224,7 @@ function pxe_cron_process() {
 		$mail_attachments = array();
 		// send all the new sheets with one email
 		foreach ($files_created as $created_file) {
-			$mail_attachments[] =  ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $created_file;
+			$mail_attachments[] =  plugin_dir_path( __FILE__ ) . '/files/' . $created_file;
 		}
 		wp_mail( $to, $subject, $body, $headers, $mail_attachments );
 
@@ -287,7 +286,7 @@ function pxe_update_petitioners () {
 function pxe_clean_up_files ( $filenames ) {
 	try {
 		foreach ($filenames as $filename) {
-			unlink( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $filename);
+			unlink( plugin_dir_path( __FILE__ ) . '/files/' . $filename);
 		}
 	} catch (Exception $e) {
 		// maybe have a support function, to email admin as notification of failure?
@@ -388,7 +387,7 @@ function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 		$writer->writeSheetRow('Sheet1', $write_row, $old_style);
 	}
 	try {
-		$writer->writeToFile( ABSPATH . 'wp-content/plugins/petition_xl_emailer/files/' . $filename . '.xlsx');
+		$writer->writeToFile( plugin_dir_path( __FILE__ ) . '/files/' . $filename . '.xlsx');
 	} catch (Exception $e) {
 		$to = 'yegfootball@gmail.com';
 		$subject = 'YEG Soccer Petition';
