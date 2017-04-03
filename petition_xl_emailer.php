@@ -7,7 +7,7 @@
  *
  * @wordpress-plugin
  * Plugin Name:       Petition XLS Emailer
- * Plugin URI:        https://github.com/ZakaryH
+ * Plugin URI:        https://github.com/ZakaryH/wp-petition-xl-emailer
  * Description:       Allow users to find local Canadian municipal representatives, email them, store users' data, later write that data to a spreadsheet and email representatives again with attached sheet
  * Version:           1.0.0
  * Author:            Zak Hughes
@@ -15,11 +15,13 @@
  * License:           GPL-2.0+
  * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       wp-pxe
- * Domain Path:       /languages
  */
 
 defined( 'ABSPATH' ) or exit;
 
+// TODO admin section
+// TODO reusable functions
+// TODO error handling
 
 global $pxe_db_version;
 $pxe_db_version = '1.0';
@@ -30,16 +32,14 @@ include_once( plugin_dir_path( __FILE__ ) . '/PHP_XLSXWriter-master/xlsxwriter.c
 */
 add_action( 'wp_enqueue_scripts', 'pxe_enqueue_styles' );
 function pxe_enqueue_styles() {
-	// if ( is_page( '14' ) ) {
 		wp_enqueue_style( 'style', plugins_url( '/style.css', __FILE__ ) );
-	// }
 }
 
 // plugin activation hooks
 register_activation_hook( __FILE__, 'pxe_activation' );
 
 /* 
-* initialize necessary plugin tables, and CRON event
+* initialize necessary plugin tables, and register CRON event
 */
 function pxe_activation() {
 	global $wpdb;
@@ -81,7 +81,7 @@ function pxe_activation() {
 
 	add_option( 'pxe_db_version', $pxe_db_version );
 
-	// add the cron task
+	// add the cron event
 	if (! wp_next_scheduled( 'pxe_weekly_event'  )) {
 		wp_schedule_event( time(), '5min', 'pxe_weekly_event' );
 	}
@@ -237,7 +237,9 @@ function pxe_cron_process() {
 
 }
 
-// check if any new petitioners
+/* check if any new petitioners
+* @return boolean
+*/
 function pxe_new_exist () {
 	global $wpdb;
 	$new_true = 1;
@@ -273,7 +275,7 @@ function pxe_update_petitioners () {
 		WHERE {$wpdb->prefix}pxe_petitioners.new_entry = 1
 		",
 		$old_bool
-		) );
+	) );
 }
 
 /*
@@ -293,7 +295,9 @@ function pxe_clean_up_files ( $filenames ) {
 	return true;
 }
 
-// query to get rep info
+/* query to get rep info
+* @return array of emails
+*/
 function pxe_get_rep_emails() {
 	global $wpdb;
 	$rep_emails = array();
@@ -318,9 +322,10 @@ function pxe_get_rep_emails() {
 
 
 /*
+* adds 2 arrays for old/new writing rows to an associative array having index of the district name, and adds that array to the array of the district type (eg. MLA)
 * @param district_types - multidimensional array - initial structure of 3 associative arrays for types
 * @parm petitioner_data - associative array - a single petitioner's table data
-* returns - multidimensional array
+* @return - multidimensional array
 */
 function pxe_add_district_structure( $district_types, $petitioner_data ) {
 	foreach ( $district_types as $dist_type => $district ) {
@@ -335,6 +340,13 @@ function pxe_add_district_structure( $district_types, $petitioner_data ) {
 	return $district_types;
 }
 
+/*
+* populates the old & new writing rows of a district
+* @param district_types - multidimensional array
+* @param petitioner - associative array
+* @param rows_age - string - "old" or "new"
+* @return multidimensional array - same structure higher up, but lowest level contains petitioner data
+*/
 // add the old and new writings rows to the containing object
 function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 	foreach ($district_types as $dist_type => $district) {
@@ -355,7 +367,10 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 }
 /*
 * creates a sheet, writes the new entries first in bold, then the old ones - both must exist to get here, if no new it stops earlier
-* returns - string - name of the created file including the file extension (.xlxs)
+* @param - writing_rows_new - array
+* @param - writing_rows_old - array
+* @param - filename - string
+* @return - string - name of the created file including the file extension (.xlxs)
 */
 function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 	$new_style = array( 'font'=>'Arial','font-size'=>10,'font-style'=>'bold', 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
@@ -409,9 +424,10 @@ function in_array_r($needle, $haystack, $strict = false) {
 
     return false;
 }
-
-// use Google maps API to geocode postal code
-// returns assoc array containing longitude and latitude
+/*
+* @param - postal_code - string
+* @return  - associative array of longitude and latitude
+*/
 function pxe_get_geo_coords ( $postal_code ) {
 	$url = 'https://maps.googleapis.com/maps/api/geocode/json?components=postal_code:' . $postal_code;
 	
@@ -452,8 +468,9 @@ function pxe_get_reps ( $lat, $long ) {
 }
 
 /*
-*
-*
+* @param rep_set - array of associative arrays
+* @param petitioner_data -  associative array
+* @return - associative array
 */
 function add_districts ( $rep_set, $petitioner_data) {
 	foreach ( $rep_set as $rep_data ) {
@@ -463,9 +480,10 @@ function add_districts ( $rep_set, $petitioner_data) {
 	return $petitioner_data;
 }
 
-// write petitioner info to table
-// TODO examine the district_name property of each rep, will need to use
-// probably have to make 1 or 3 new columns to hold the district information
+/*
+* Adds petitioner data to table
+* @param petitioner_data - associative array
+*/
 function pxe_insert_petitioner ( $petitioner_data ) {
 	global $wpdb;
 	$comma_separated = implode(",", $petitioner_data['messages']);
@@ -484,8 +502,10 @@ function pxe_insert_petitioner ( $petitioner_data ) {
 	);
 }
 
-// write representative info to table, using replace
-// TODO think if this is really that efficient
+/*
+* Inserts if new, replaces if already exists
+* @param rep_data - associative array
+*/
 function pxe_insert_representative ( $rep_data ) {
 	global $wpdb;
 	$table_name = $wpdb->prefix . 'pxe_representatives';
@@ -505,7 +525,6 @@ function pxe_insert_representative ( $rep_data ) {
 	* they would have the same office and district, but different names etc.
 	* individually the office and district can be repeated, but the combination
 	* is unique
-	* not sure how great this setup is 
 	 */
 
 	// $wpdb->replace( 
@@ -523,10 +542,7 @@ function pxe_insert_representative ( $rep_data ) {
 /*
 * @param rep_set array : an array of associateive arrays of representatives
 * @param messages number : the value for the corresponding message
-* @return - TODO
 */
-// TODO look at making this reusable?
-// make it usable for 1st email, second email, admin email and error email?
 function pxe_send_email( $rep_set, $petitioner_data ) {
 	$message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['name'] );
 
@@ -552,10 +568,10 @@ function pxe_send_email( $rep_set, $petitioner_data ) {
 }
 
 /*
+* Builds the messages for the applicable message ids
 * @param messages number : an id for the template message
 * @return - string - email message template
 */
-// return the template corresponding to the message id
 function pxe_get_template_email( $messages, $username ) {
 	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $username that has identified they live in your constituency.</p>";
 	$message .= "<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>";
@@ -586,7 +602,9 @@ function pxe_get_template_email( $messages, $username ) {
 
 // shortcode for user input form
 add_shortcode('show_pxe_form', 'pxe_create_form');
-// TODO add custom input HTML structure
+/*
+* shortcode for the plugin's form, enqueues required script where this appears 
+*/
 function pxe_create_form(){
 	// enqueue script where the shortcode form appears
 	wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
