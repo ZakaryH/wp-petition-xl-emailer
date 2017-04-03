@@ -45,8 +45,8 @@ function pxe_activation() {
 	global $wpdb;
 	global $pxe_db_version;
 
-	$table_name = $wpdb->prefix . 'pxe_petitioners_newer';
-	$table_name_two = $wpdb->prefix . 'pxe_representatives_newer';
+	$table_name = $wpdb->prefix . 'pxe_petitioners';
+	$table_name_two = $wpdb->prefix . 'pxe_representatives';
 	
 	$charset_collate = $wpdb->get_charset_collate();
 
@@ -155,7 +155,7 @@ add_action( 'pxe_weekly_event', 'pxe_cron_process' );
 // the actual script executed by CRON (wp-cron)
 function pxe_cron_process() {
 	global $wpdb;
-	// $table_name = $wpdb->prefix . 'pxe_petitioners_newer';
+	// $table_name = $wpdb->prefix . 'pxe_petitioners';
 
 	// proceed only if at least 1 new petitioner exists
 	if ( pxe_new_exist() ) {
@@ -169,7 +169,7 @@ function pxe_cron_process() {
 		$results = $wpdb->get_results(
 			"
 			SELECT p_name, mp_district, mla_district, council_district, postal, message, new_entry 
-			FROM {$wpdb->prefix}pxe_petitioners_newer
+			FROM {$wpdb->prefix}pxe_petitioners
 			", ARRAY_A
 		);
 		// create each disctrict's structure and populate it
@@ -244,9 +244,9 @@ function pxe_new_exist () {
 
 	$new_results = $wpdb->get_col( $wpdb->prepare(
 		"
-		SELECT {$wpdb->prefix}pxe_petitioners_newer.new_entry 
-		FROM {$wpdb->prefix}pxe_petitioners_newer 
-		WHERE {$wpdb->prefix}pxe_petitioners_newer.new_entry = %d
+		SELECT {$wpdb->prefix}pxe_petitioners.new_entry 
+		FROM {$wpdb->prefix}pxe_petitioners 
+		WHERE {$wpdb->prefix}pxe_petitioners.new_entry = %d
 		",
 		$new_true	
 	) );
@@ -254,12 +254,9 @@ function pxe_new_exist () {
 	if ( $new_results ) {
 		if ( count($new_results) > 0 ) {
 			return true;
-		} else {
-			return false;
 		}
-	} else {
-		return false;
 	}
+	return false;
 }
 
 /*
@@ -271,9 +268,9 @@ function pxe_update_petitioners () {
 
 	$wpdb->query( $wpdb->prepare(
 		"
-		UPDATE {$wpdb->prefix}pxe_petitioners_newer 
-		SET {$wpdb->prefix}pxe_petitioners_newer.new_entry = %d 
-		WHERE {$wpdb->prefix}pxe_petitioners_newer.new_entry = 1
+		UPDATE {$wpdb->prefix}pxe_petitioners 
+		SET {$wpdb->prefix}pxe_petitioners.new_entry = %d 
+		WHERE {$wpdb->prefix}pxe_petitioners.new_entry = 1
 		",
 		$old_bool
 		) );
@@ -304,7 +301,7 @@ function pxe_get_rep_emails() {
 	$results = $wpdb->get_results(
 		"
 		SELECT rep_name, email, district_name, elected_office, office_and_district 
-		FROM {$wpdb->prefix}pxe_representatives_newer
+		FROM {$wpdb->prefix}pxe_representatives
 		", ARRAY_A
 	);
 	$num_rows = $wpdb->num_rows;
@@ -472,7 +469,7 @@ function add_districts ( $rep_set, $petitioner_data) {
 function pxe_insert_petitioner ( $petitioner_data ) {
 	global $wpdb;
 	$comma_separated = implode(",", $petitioner_data['messages']);
-	$table_name = $wpdb->prefix . 'pxe_petitioners_newer';
+	$table_name = $wpdb->prefix . 'pxe_petitioners';
 	
 	$wpdb->insert( 
 		$table_name, 
@@ -491,7 +488,7 @@ function pxe_insert_petitioner ( $petitioner_data ) {
 // TODO think if this is really that efficient
 function pxe_insert_representative ( $rep_data ) {
 	global $wpdb;
-	$table_name = $wpdb->prefix . 'pxe_representatives_newer';
+	$table_name = $wpdb->prefix . 'pxe_representatives';
 	
 	$wpdb->replace( 
 		$table_name, 

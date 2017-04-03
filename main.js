@@ -5,6 +5,7 @@ jQuery(document).ready( function($) {
 //TODO consider how to handle if any step fails on the way since some apis are outside of our control
 //TODO limit the number of emails that can be sent by a single user, look at cookies, session ID since name could be the same
 //though postal code shouldn't be?
+// TODO make the AJAX query dynamic, based on PHP var maybe
 
 jQuery('input[type=checkbox]').each(toggleListCheckbox).change(toggleListCheckbox);
 /*--------------------------------Utility Functions-----------------------------------------*/
@@ -91,7 +92,7 @@ function pxe_plugin_init ( postalCode, name, email, messages) {
       email: email,
       messages: messages
     },
-    url: "http://yegsoccer.web.dmitcapstone.ca/wordpress/wp-admin/admin-ajax.php",
+    url: "http://yegsoccer.com/wp-admin/admin-ajax.php",
     success: function(value) {
       // jQuery(this).html(value);
       console.log(JSON.parse(value) );
