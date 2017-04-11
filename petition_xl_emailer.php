@@ -627,6 +627,7 @@ function pxe_create_form(){
 
 ?>
 <form class="rep-petition-form">
+	<input type="hidden" value="<?php echo site_url(); ?>" id="siteUrl">
 	<div class="load-container"></div>
 	<div class="form-half first-half">
 		<div class="form-group">

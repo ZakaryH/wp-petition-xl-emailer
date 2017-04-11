@@ -76,6 +76,8 @@ jQuery(document).ready( function($) {
 
   // pass user input to the plugin, handle the response
   function pxe_plugin_init ( postalCode, firstName, lastName, email, messages) {
+    var siteUrl = document.getElementById("siteUrl").value;
+
     jQuery(".load-container").append( "<div class='load-spinner'></div>" );
     jQuery("input").prop('disabled', true);
      jQuery.ajax({
@@ -88,7 +90,7 @@ jQuery(document).ready( function($) {
         email: email,
         messages: messages
       },
-      url: "http://yegsoccer.com/wp-admin/admin-ajax.php",
+      url: siteUrl + "/wp-admin/admin-ajax.php",
       success: function(value) {
         // console.log(JSON.parse(value) );
       jQuery(".load-spinner").remove();
