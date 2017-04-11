@@ -13,7 +13,6 @@ jQuery(document).ready( function($) {
 
   // validate the postal code according to canadian format (still not necessarily valid code)
   function postalFilter (postalCode) {
-      var us = new RegExp("^\\d{5}(-{0,1}\\d{4})?$");
       var ca = new RegExp(/([ABCEGHJKLMNPRSTVXY]\d)([ABCEGHJKLMNPRSTVWXYZ]\d){2}/i);
 
       if (! postalCode) {
@@ -23,9 +22,6 @@ jQuery(document).ready( function($) {
       postalCode = postalCode.toString().trim();
       postalCode = postalCode.replace(/\s/g, '');
 
-      if (us.test(postalCode.toString())) {
-          return postalCode;
-      }
 
       if (ca.test(postalCode.toString().replace(/\W+/g, ''))) {
           return postalCode;
@@ -65,11 +61,17 @@ jQuery(document).ready( function($) {
     if (postalCode !== null && postalCode !== undefined) {
       pxe_plugin_init( postalCode, firstName, lastName, userEmail, userMessages );
     } else {
-      if ( jQuery("#petition-error-div").children().length === 0 ) {
-        jQuery("#petition-error-div").append( "<strong>Invalid postal code</strong>" );
-      }
+      showErrors( "Invalid postal code" );
     }
     return false;
+  }
+
+  function showErrors ( errorMessage ) {
+    if ( jQuery("#petition-error-div").children().length === 0 ) {
+      jQuery("#petition-error-div").append( "<strong class='error'>" + errorMessage + "</strong>" );
+    } else {
+        jQuery("#petition-error-div .error").replaceWith( "<strong class='error'>" + errorMessage + "</strong>" );
+      }
   }
 
   /*--------------------------------Plugin Functions-----------------------------------------*/
@@ -93,13 +95,14 @@ jQuery(document).ready( function($) {
       url: siteUrl + "/wp-admin/admin-ajax.php",
       success: function(value) {
         // console.log(JSON.parse(value) );
-      jQuery(".load-spinner").remove();
+        jQuery(".load-spinner").remove();
         showResults( JSON.parse( value ) );
       },
       error: function(error) {
-        console.log(error);
-        console.log(error.statusText);
-        console.log(error.responseText);
+        // display errors
+        jQuery("input").prop('disabled', false);
+        jQuery(".load-spinner").remove();
+        showErrors( error.responseText );
       }
     });
   }

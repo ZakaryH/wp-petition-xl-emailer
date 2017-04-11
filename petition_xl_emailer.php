@@ -1,5 +1,4 @@
 <?php
-
 /**
  *
  * @link              http://zakaryhughes.com
@@ -22,7 +21,6 @@ defined( 'ABSPATH' ) or exit;
 // TODO admin section
 // TODO reusable functions
 // TODO error handling
-
 global $pxe_db_version;
 $pxe_db_version = '1.0';
 include_once( plugin_dir_path( __FILE__ ) . '/PHP_XLSXWriter-master/xlsxwriter.class.php');
@@ -35,7 +33,7 @@ function pxe_enqueue_styles() {
 		wp_enqueue_style( 'style', plugins_url( '/style.css', __FILE__ ) );
 }
 
-// plugin activation hooks
+/* plugin activation hooks */
 register_activation_hook( __FILE__, 'pxe_activation' );
 
 /* 
@@ -105,7 +103,6 @@ function pxe_cron_schedule_beta($schedules){
 }
 add_filter('cron_schedules','pxe_cron_schedule_beta');
 
-
 // register plugin deactivation function
 register_deactivation_hook( __FILE__, 'pxe_deactivation' );
 
@@ -120,13 +117,7 @@ add_action( 'wp_ajax_pxe_main_process_async', 'pxe_main_process' );
 
 // main script called by the AJAX submission of plugin form
 function pxe_main_process() {
-	// TODO sanitize
-	// TODO add error handling for bad data (echo something and receive it on client side)
-	// strip tags, check postal format & email format?
-	$_POST['firstName'] = strip_tags($_POST['firstName']);
-	$_POST['lastName'] = strip_tags($_POST['lastName']);
-	$_POST['postalCode'] = strip_tags($_POST['postalCode']);
-
+	// email errors to the main email account for exceptions
 	$petitioner_data = array(
 		'postal_code' => $_POST['postalCode'],
 		'email' => $_POST['email'],
@@ -135,17 +126,19 @@ function pxe_main_process() {
 		'messages' => $_POST['messages'],
 		);
 
+	// sanitize data
+	$petitioner_data = validateInput( $petitioner_data );
+	// postal code to lat/long coords
 	$location = pxe_get_geo_coords( $petitioner_data['postal_code'] );
-
-	// TODO make sure to be able to handle false case
+	// get reps using lat/long
 	$rep_set = pxe_get_reps( $location->lat, $location->lng );
+	// add districts from rep data to petitioner data
 	$petitioner_data = pxe_add_districts( $rep_set, $petitioner_data );
-
 	pxe_send_email( $rep_set, $petitioner_data );
-	// prepare the output
+	// pass reps to client side for success message
 	$output = array_values( $rep_set );
-	echo json_encode($output);
-
+	echo json_encode( $output );
+	// add data to tables
 	pxe_insert_petitioner( $petitioner_data );
 	foreach ($rep_set as $rep_data) {
 		pxe_insert_representative( $rep_data );
@@ -238,7 +231,6 @@ function pxe_cron_process() {
 		// no new petitioners
 		exit();
 	}
-
 }
 
 /* check if any new petitioners
@@ -323,7 +315,6 @@ function pxe_get_rep_emails() {
 	}
 	return $rep_emails;
 }
-
 
 /*
 * adds 2 arrays for old/new writing rows to an associative array having index of the district name, and adds that array to the array of the district type (eg. MLA)
@@ -423,6 +414,69 @@ function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 	return $filename . '.xlsx';
 }
 
+/*
+* sanitizes data, and returns it or exits with an error message if invalid data
+* @param input_data - assoc array - petitioner's input data
+* @ return assoc array of validated and formatted data
+*/
+function validateInput ( $input_data ) {
+	$input_data['first_name'] = trim( strip_tags($input_data['first_name']) );
+	$input_data['last_name'] = trim( strip_tags($input_data['last_name']) );
+
+	// check if empty name(s)
+	if ( ($input_data['first_name'] === '') || ($input_data['first_name'] === '') ) {
+		header("HTTP/1.0 434 Input Error" );
+		echo "Invalid Name";
+		exit();
+	}
+
+	// check postal code FORMAT ONLY - may still not yield proper results
+	$input_data['postal_code'] = postalFilter( $input_data['postal_code'] );
+	if ( !$input_data['postal_code'] ) {
+		header("HTTP/1.0 434 Input Error" );
+		echo "Invalid Postal Code";
+		exit();
+	}
+
+	// check email format
+	if ( !filter_var($input_data['email'], FILTER_VALIDATE_EMAIL) ) {
+		header("HTTP/1.0 434 Input Error" );
+		echo "Invalid Email Address";
+		exit();
+	}
+
+	// check if each msg is 1 of the 5 accepted values
+	foreach ($input_data['messages'] as $msg) {
+		if ( ($msg !== 'msg_0') && ($msg !== 'msg_1') && ($msg !== 'msg_2') && ($msg !== 'msg_3') && ($msg !== 'msg_4') ) {
+			header("HTTP/1.0 434 Input Error" );
+			echo "Invalid Message Value";
+			exit();		
+		}
+	}
+	return $input_data;
+}
+
+/*
+* @param postalCode - string
+* @returns uppercased string with spaces removed, or false
+*/
+function postalFilter ($postalCode) {
+	$postalCode = (string) $postalCode;
+	$postalCode = trim($postalCode);
+    $pattern = '/([ABCEGHJKLMNPRSTVXY]\d)([ABCEGHJKLMNPRSTVWXYZ]\d){2}/i';
+    $space_pattern = '/\s/g';
+
+    if ($postalCode === '') {
+        return false;
+    }
+    // remove spaces
+    $postalCode = preg_replace('/\s+/', '', $postalCode);
+
+    if (preg_match($pattern, $postalCode)) {
+    	return strtoupper( $postalCode );    
+    }
+    return false;
+}
 
 // for multidimensional arrays using recursion
 function in_array_r($needle, $haystack, $strict = false) {
@@ -431,9 +485,9 @@ function in_array_r($needle, $haystack, $strict = false) {
             return true;
         }
     }
-
     return false;
 }
+
 /*
 * @param - postal_code - string
 * @return  - associative array of longitude and latitude
@@ -640,7 +694,7 @@ function pxe_create_form(){
 		</div>
 		<div class="form-group">
 			<label for="user_email">Email</label>
-			<input class="form-control" type="email" id="user_email" name="user_email" autocomplete="off" placeholder="Your email" required>
+			<input class="form-control" type="email" id="user_email" name="user_email" autocomplete="off" placeholder="address@example.com" required>
 		</div>
 		<div class="form-group">
 			<label for="postal_code">Postal Code</label>
