@@ -52,7 +52,9 @@ function pxe_activation() {
 
 	$sql = "CREATE TABLE $table_name (
 		p_id tinyint(11) NOT NULL AUTO_INCREMENT,
-		p_name varchar(255) NOT NULL,
+		first_name varchar(255) NOT NULL,
+		last_name varchar(255) NOT NULL,
+		email varchar(255) NOT NULL,
 		mp_district varchar(255) NOT NULL,
 		mla_district varchar(255) NOT NULL,
 		council_district varchar(255) NOT NULL,
@@ -121,13 +123,15 @@ function pxe_main_process() {
 	// TODO sanitize
 	// TODO add error handling for bad data (echo something and receive it on client side)
 	// strip tags, check postal format & email format?
-	$_POST['name'] = strip_tags($_POST['name']);
+	$_POST['firstName'] = strip_tags($_POST['firstName']);
+	$_POST['lastName'] = strip_tags($_POST['lastName']);
 	$_POST['postalCode'] = strip_tags($_POST['postalCode']);
 
 	$petitioner_data = array(
 		'postal_code' => $_POST['postalCode'],
 		'email' => $_POST['email'],
-		'name' => $_POST['name'],
+		'first_name' => $_POST['firstName'],
+		'last_name' => $_POST['lastName'],
 		'messages' => $_POST['messages'],
 		);
 
@@ -135,7 +139,7 @@ function pxe_main_process() {
 
 	// TODO make sure to be able to handle false case
 	$rep_set = pxe_get_reps( $location->lat, $location->lng );
-	$petitioner_data = add_districts( $rep_set, $petitioner_data );
+	$petitioner_data = pxe_add_districts( $rep_set, $petitioner_data );
 
 	pxe_send_email( $rep_set, $petitioner_data );
 	// prepare the output
@@ -168,7 +172,7 @@ function pxe_cron_process() {
 
 		$results = $wpdb->get_results(
 			"
-			SELECT p_name, mp_district, mla_district, council_district, postal, message, new_entry 
+			SELECT first_name, last_name, email, mp_district, mla_district, council_district, postal, message, new_entry 
 			FROM {$wpdb->prefix}pxe_petitioners
 			", ARRAY_A
 		);
@@ -352,16 +356,19 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 	foreach ($district_types as $dist_type => $district) {
 		// TODO this is only going to be false if two people live in the same district and have the same name
 		// is that even a problem? Not really
-		if (!in_array_r($petitioner['p_name'], $district_types[$dist_type][$petitioner[$dist_type . '_district']])) {
+		// if (!in_array_r($petitioner['p_name'], $district_types[$dist_type][$petitioner[$dist_type . '_district']])) {
 			// push each "new" petitioner to the "writing_rows_new" for each of their district_types
 			$district_types[$dist_type][$petitioner[$dist_type . '_district']][$rows_age][] = array(
-				"name" => $petitioner['p_name'],
+				"first_name" => $petitioner['first_name'],
+				"last_name" => $petitioner['last_name'],
+				"email" => $petitioner['email'],
+				"postal_code" => $petitioner['postal'],
 				"mla_district" => $petitioner['mla_district'],
 				"mp_district" => $petitioner['mp_district'],
 				"council_district" => $petitioner['council_district'],
 				"message" => $petitioner['message']
 			);
-		}
+		// }
 	}
 	return $district_types;
 }
@@ -376,7 +383,10 @@ function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 	$new_style = array( 'font'=>'Arial','font-size'=>10,'font-style'=>'bold', 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
 	$old_style = array( 'font'=>'Arial','font-size'=>10, 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
 	$header = array(
-		'Name' => 'string',
+		'First Name' => 'string',
+		'Last Name' => 'string',
+		'Email' => 'string',
+		'Postal Code' => 'string',
 		'MLA District' => 'string',
 		'MP District' => 'string',
 		'Council District' => 'string',
@@ -472,7 +482,7 @@ function pxe_get_reps ( $lat, $long ) {
 * @param petitioner_data -  associative array
 * @return - associative array
 */
-function add_districts ( $rep_set, $petitioner_data) {
+function pxe_add_districts ( $rep_set, $petitioner_data) {
 	foreach ( $rep_set as $rep_data ) {
 		$petitioner_data[$rep_data['elected_office']] = $rep_data['district_name'];
 	}
@@ -486,13 +496,19 @@ function add_districts ( $rep_set, $petitioner_data) {
 */
 function pxe_insert_petitioner ( $petitioner_data ) {
 	global $wpdb;
-	$comma_separated = implode(",", $petitioner_data['messages']);
 	$table_name = $wpdb->prefix . 'pxe_petitioners';
+	if ( count( $petitioner_data['messages'] ) > 0 ) {
+		$comma_separated = implode(",", $petitioner_data['messages']);
+	} else {
+		$comma_separated = "msg_0";
+	}
 	
 	$wpdb->insert( 
 		$table_name, 
 		array( 
-			'p_name' => $petitioner_data['name'], 
+			'first_name' => $petitioner_data['first_name'], 
+			'last_name' => $petitioner_data['last_name'], 
+			'email' => $petitioner_data['email'], 
 			'mp_district' => $petitioner_data['MP'], 
 			'mla_district' => $petitioner_data['MLA'], 
 			'council_district' => $petitioner_data['Councillor'], 
@@ -544,7 +560,7 @@ function pxe_insert_representative ( $rep_data ) {
 * @param messages number : the value for the corresponding message
 */
 function pxe_send_email( $rep_set, $petitioner_data ) {
-	$message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['name'] );
+	$message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['first_name'], $petitioner_data['last_name'] );
 
 	// send out 3 emails
 	foreach ($rep_set as $key => $value) {
@@ -572,8 +588,8 @@ function pxe_send_email( $rep_set, $petitioner_data ) {
 * @param messages number : an id for the template message
 * @return - string - email message template
 */
-function pxe_get_template_email( $messages, $username ) {
-	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $username that has identified they live in your constituency.</p>";
+function pxe_get_template_email( $messages, $first_name, $last_name ) {
+	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $first_name $last_name that has identified they live in your constituency.</p>";
 	$message .= "<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>";
 
 	foreach ($messages as $msg_id) {
@@ -614,16 +630,20 @@ function pxe_create_form(){
 	<div class="load-container"></div>
 	<div class="form-half first-half">
 		<div class="form-group">
-			<label for="user_name">Name</label>
-			<input class="form-control" type="text" id="user_name" name="user_name" autocomplete="off" placeholder="Your name">
+			<label for="first_name">First Name</label>
+			<input class="form-control" type="text" id="first_name" name="first_name" autocomplete="off" placeholder="Your first name" required>
+		</div>
+		<div class="form-group">
+			<label for="last_name">Last Name</label>
+			<input class="form-control" type="text" id="last_name" name="last_name" autocomplete="off" placeholder="Your last name" required>
 		</div>
 		<div class="form-group">
 			<label for="user_email">Email</label>
-			<input class="form-control" type="email" id="user_email" name="user_email" autocomplete="off" placeholder="Your email">
+			<input class="form-control" type="email" id="user_email" name="user_email" autocomplete="off" placeholder="Your email" required>
 		</div>
 		<div class="form-group">
 			<label for="postal_code">Postal Code</label>
-			<input class="form-control" type="text" id="postal_code" name="postal_code" autocomplete="off" placeholder="Your postal code">
+			<input class="form-control" type="text" id="postal_code" name="postal_code" autocomplete="off" placeholder="Your postal code" required>
 		</div>
 		<input type="submit" value="Submit" class="btn btn-warning btn-block">
 	</div>

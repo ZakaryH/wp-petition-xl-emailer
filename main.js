@@ -48,8 +48,8 @@ jQuery(document).ready( function($) {
   /* handle the form logic in JS */
   function handleForm(e) {
     var postalCode = e.srcElement['postal_code'].value;
-    //TODO validate the username
-    var userName = e.srcElement['user_name'].value;
+    var firstName = e.srcElement['first_name'].value;
+    var lastName = e.srcElement['last_name'].value;
     // make an array of the checked checkboxes
     var userEmail = e.srcElement['user_email'].value;
     var userMessages = jQuery(".rep-petition-form input:checkbox:checked").map(function(){
@@ -63,7 +63,7 @@ jQuery(document).ready( function($) {
     /* validate, trim and remove spaces*/
     postalCode = postalFilter(postalCode);
     if (postalCode !== null && postalCode !== undefined) {
-      pxe_plugin_init( postalCode, userName, userEmail, userMessages );
+      pxe_plugin_init( postalCode, firstName, lastName, userEmail, userMessages );
     } else {
       if ( jQuery("#petition-error-div").children().length === 0 ) {
         jQuery("#petition-error-div").append( "<strong>Invalid postal code</strong>" );
@@ -75,7 +75,7 @@ jQuery(document).ready( function($) {
   /*--------------------------------Plugin Functions-----------------------------------------*/
 
   // pass user input to the plugin, handle the response
-  function pxe_plugin_init ( postalCode, name, email, messages) {
+  function pxe_plugin_init ( postalCode, firstName, lastName, email, messages) {
     jQuery(".load-container").append( "<div class='load-spinner'></div>" );
     jQuery("input").prop('disabled', true);
      jQuery.ajax({
@@ -83,7 +83,8 @@ jQuery(document).ready( function($) {
       data:{
         action:'pxe_main_process_async',
         postalCode: postalCode,
-        name: name,
+        firstName: firstName,
+        lastName: lastName,
         email: email,
         messages: messages
       },
@@ -95,6 +96,8 @@ jQuery(document).ready( function($) {
       },
       error: function(error) {
         console.log(error);
+        console.log(error.statusText);
+        console.log(error.responseText);
       }
     });
   }
