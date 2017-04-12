@@ -127,10 +127,12 @@ function pxe_main_process() {
 		);
 
 	// sanitize data
-	$petitioner_data = validateInput( $petitioner_data );
+	$petitioner_data = pxe_validate_input( $petitioner_data );
 	// postal code to lat/long coords
+	// EXCEPTION: NO RESPONSE/EMPTY RESPONSE
 	$location = pxe_get_geo_coords( $petitioner_data['postal_code'] );
 	// get reps using lat/long
+	// EXCEPTION: NO RESPONSE/NO REPS FOUND
 	$rep_set = pxe_get_reps( $location->lat, $location->lng );
 	// add districts from rep data to petitioner data
 	$petitioner_data = pxe_add_districts( $rep_set, $petitioner_data );
@@ -198,7 +200,7 @@ function pxe_cron_process() {
 					}
 					// rep emails
 					$file_name = $district_type . "-" . $district_name;
-					$files_created[] = write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $file_name);
+					$files_created[] = pxe_write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $file_name );
 
 					$to = 'yegfootball@gmail.com';
 					$subject = 'YEG Soccer Weekly Reminder';
@@ -346,7 +348,6 @@ function pxe_add_district_structure( $district_types, $petitioner_data ) {
 function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 	foreach ($district_types as $dist_type => $district) {
 		// TODO this is only going to be false if two people live in the same district and have the same name
-		// is that even a problem? Not really
 		// if (!in_array_r($petitioner['p_name'], $district_types[$dist_type][$petitioner[$dist_type . '_district']])) {
 			// push each "new" petitioner to the "writing_rows_new" for each of their district_types
 			$district_types[$dist_type][$petitioner[$dist_type . '_district']][$rows_age][] = array(
@@ -363,6 +364,7 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 	}
 	return $district_types;
 }
+
 /*
 * creates a sheet, writes the new entries first in bold, then the old ones - both must exist to get here, if no new it stops earlier
 * @param - writing_rows_new - array
@@ -370,7 +372,7 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 * @param - filename - string
 * @return - string - name of the created file including the file extension (.xlxs)
 */
-function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
+function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 	$new_style = array( 'font'=>'Arial','font-size'=>10,'font-style'=>'bold', 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
 	$old_style = array( 'font'=>'Arial','font-size'=>10, 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
 	$header = array(
@@ -419,7 +421,7 @@ function write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 * @param input_data - assoc array - petitioner's input data
 * @ return assoc array of validated and formatted data
 */
-function validateInput ( $input_data ) {
+function pxe_validate_input ( $input_data ) {
 	$input_data['first_name'] = trim( strip_tags($input_data['first_name']) );
 	$input_data['last_name'] = trim( strip_tags($input_data['last_name']) );
 
@@ -431,7 +433,7 @@ function validateInput ( $input_data ) {
 	}
 
 	// check postal code FORMAT ONLY - may still not yield proper results
-	$input_data['postal_code'] = postalFilter( $input_data['postal_code'] );
+	$input_data['postal_code'] = pxe_postal_filter( $input_data['postal_code'] );
 	if ( !$input_data['postal_code'] ) {
 		header("HTTP/1.0 434 Input Error" );
 		echo "Invalid Postal Code";
@@ -460,7 +462,7 @@ function validateInput ( $input_data ) {
 * @param postalCode - string
 * @returns uppercased string with spaces removed, or false
 */
-function postalFilter ($postalCode) {
+function pxe_postal_filter ($postalCode) {
 	$postalCode = (string) $postalCode;
 	$postalCode = trim($postalCode);
     $pattern = '/([ABCEGHJKLMNPRSTVXY]\d)([ABCEGHJKLMNPRSTVWXYZ]\d){2}/i';
@@ -613,6 +615,7 @@ function pxe_insert_representative ( $rep_data ) {
 * @param rep_set array : an array of associateive arrays of representatives
 * @param messages number : the value for the corresponding message
 */
+// TODO make into a generic email function
 function pxe_send_email( $rep_set, $petitioner_data ) {
 	$message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['first_name'], $petitioner_data['last_name'] );
 
@@ -621,20 +624,26 @@ function pxe_send_email( $rep_set, $petitioner_data ) {
 		$rep_email = $rep_set[$key]['email'];
 		$rep_name = $rep_set[$key]['name'];
 		$rep_office = $rep_set[$key]['elected_office'];
-		// send that template to the rep, which gets passed in
 		$to = 'yegfootball@gmail.com';
 		$subject = 'YEG Soccer Petition';
-		// $body = 'name: ' . $rep_name . ' email: ' . $rep_email . 'elected office: ' . $rep_office;
 		$body = $message_template;
 		$headers[] = 'Content-Type: text/html';
 		// $headers[] = 'Cc: same_ple_mail@mailinator.com';
 		$headers[] = 'charset=UTF-8';
 		// $headers = array( 'Content-Type: text/html; charset=UTF-8; Cc: same_ple_mail@mailinator.com;' );
-		
-		// TODO swap to use PHPMailer instead of the php mail
-		// attachments etc.
 		wp_mail( $to, $subject, $body, $headers );
 	}
+}
+
+function pxe_send_error( $error_body, $user_data ) {
+	// send an email to admin with description of error
+	// and user data 
+	$to = 'yegfootball@gmail.com';
+	$subject = 'YEG Soccer Petition';
+	$body = "<p>$error_body</p>" ;
+	$headers[] = 'Content-Type: text/html';
+	$headers[] = 'charset=UTF-8';
+	wp_mail( $to, $subject, $body, $headers );
 }
 
 /*

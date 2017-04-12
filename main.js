@@ -46,8 +46,8 @@ jQuery(document).ready( function($) {
     var postalCode = e.srcElement['postal_code'].value;
     var firstName = e.srcElement['first_name'].value;
     var lastName = e.srcElement['last_name'].value;
-    // make an array of the checked checkboxes
     var userEmail = e.srcElement['user_email'].value;
+    // make an array of the checked checkboxes
     var userMessages = jQuery(".rep-petition-form input:checkbox:checked").map(function(){
       return jQuery(this).val();
     }).get();
@@ -57,11 +57,17 @@ jQuery(document).ready( function($) {
     }
 
     /* validate, trim and remove spaces*/
+    firstName = firstName.trim();
+    lastName = lastName.trim();
     postalCode = postalFilter(postalCode);
-    if (postalCode !== null && postalCode !== undefined) {
-      pxe_plugin_init( postalCode, firstName, lastName, userEmail, userMessages );
-    } else {
+    if (postalCode === null || postalCode === undefined) {
       showErrors( "Invalid postal code" );
+    } else if ( firstName === '' ) {
+      showErrors( "Invalid first name" );
+    } else if ( lastName === '' ) {
+      showErrors( "Invalid last name" );
+    } else {
+      pxe_plugin_init( postalCode, firstName, lastName, userEmail, userMessages );
     }
     return false;
   }
