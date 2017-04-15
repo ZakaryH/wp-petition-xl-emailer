@@ -141,8 +141,17 @@ function pxe_main_process() {
 		exit();
 	}
 	// get reps using lat/long
-	// EXCEPTION: NO RESPONSE/NO REPS FOUND
 	$rep_set = pxe_get_reps( $location->lat, $location->lng );
+	if ( is_null( $rep_set ) ) {
+		pxe_show_client_error("No Response", "Unable to connect to Represent service.");
+		pxe_send_error( 'Unable to connect to Represent service.', $petitioner_data );
+		exit();
+	}
+	if ( !$rep_set ) {
+		pxe_show_client_error("Empty Response", "No representatives found for that postal code.");
+		pxe_send_error( 'No representatives found for that postal code.', $petitioner_data );
+		exit();
+	}
 	// add districts from rep data to petitioner data
 	$petitioner_data = pxe_add_districts( $rep_set, $petitioner_data );
 	pxe_send_email( $rep_set, $petitioner_data );
@@ -244,7 +253,8 @@ function pxe_cron_process() {
 	}
 }
 
-/* check if any new petitioners
+/**
+* check if any new petitioners 
 * @return boolean
 */
 function pxe_new_exist () {
@@ -285,9 +295,9 @@ function pxe_update_petitioners () {
 	) );
 }
 
-/*
+/**
 * @param filenames - array - list of files to delete, including the extension
-* return bool 
+* @return bool 
 */
 function pxe_clean_up_files ( $filenames ) {
 	try {
@@ -302,7 +312,8 @@ function pxe_clean_up_files ( $filenames ) {
 	return true;
 }
 
-/* query to get rep info
+/**
+* query to get rep info
 * @return array of emails
 */
 function pxe_get_rep_emails() {
@@ -327,10 +338,10 @@ function pxe_get_rep_emails() {
 	return $rep_emails;
 }
 
-/*
+/**
 * adds 2 arrays for old/new writing rows to an associative array having index of the district name, and adds that array to the array of the district type (eg. MLA)
 * @param district_types - multidimensional array - initial structure of 3 associative arrays for types
-* @parm petitioner_data - associative array - a single petitioner's table data
+* @param petitioner_data - associative array - a single petitioner's table data
 * @return - multidimensional array
 */
 function pxe_add_district_structure( $district_types, $petitioner_data ) {
@@ -346,7 +357,7 @@ function pxe_add_district_structure( $district_types, $petitioner_data ) {
 	return $district_types;
 }
 
-/*
+/** 
 * populates the old & new writing rows of a district
 * @param district_types - multidimensional array
 * @param petitioner - associative array
@@ -374,7 +385,7 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 	return $district_types;
 }
 
-/*
+/**
 * creates a sheet, writes the new entries first in bold, then the old ones - both must exist to get here, if no new it stops earlier
 * @param - writing_rows_new - array
 * @param - writing_rows_old - array
@@ -435,10 +446,10 @@ function pxe_show_client_error( $error_type, $error_msg ) {
 }
 
 
-/*
+/**
 * sanitizes data, and returns it or exits with an error message if invalid data
 * @param input_data - assoc array - petitioner's input data
-* @ return assoc array of validated and formatted data
+* @return assoc array of validated and formatted data
 */
 function pxe_validate_input ( $input_data ) {
 	$input_data['first_name'] = trim( strip_tags($input_data['first_name']) );
@@ -473,9 +484,9 @@ function pxe_validate_input ( $input_data ) {
 	return $input_data;
 }
 
-/*
+/**
 * @param postalCode - string
-* @returns uppercased string with spaces removed, or false
+* @return uppercased string with spaces removed, or false
 */
 function pxe_postal_filter ($postalCode) {
 	$postalCode = (string) $postalCode;
@@ -505,7 +516,7 @@ function in_array_r($needle, $haystack, $strict = false) {
     return false;
 }
 
-/*
+/**
 * @param - postal_code - string
 * @return  - associative array of longitude and latitude
 */
@@ -527,7 +538,7 @@ function pxe_get_geo_coords ( $postal_code ) {
 	return false;
 }
 
-/*
+/**
 * @param lat float geographic latitude value
 * @param long float geographic longitude value
 * @return - bool or array of associative arrays
@@ -535,24 +546,27 @@ function pxe_get_geo_coords ( $postal_code ) {
 function pxe_get_reps ( $lat, $long ) {
 	$url = 'https://represent.opennorth.ca/representatives/?point=' . $lat . ',' . $long;
 	$request = wp_remote_get( esc_url_raw( $url ) );
-
+	// error getting response from resource
 	if ( is_wp_error( $request ) ) {
-		return false;
+		return null;
 	}
-
-	$api_response = json_decode( wp_remote_retrieve_body( $request ), true );
+	$response = json_decode( wp_remote_retrieve_body( $request ), true );
 	// grab only the rep objects from response
-	$api_response = $api_response['objects'];
-	// filter the array
-	// TODO make this alterable by the plugin admin, also add a plugin admin
-	return array_filter( $api_response, function( $v ) {
-		if ( $v['elected_office'] !== "Mayor") {
-			return $v;
-		}
-	});
+	$response = $response['objects'];
+	if ( count( $response > 0 )) {
+		// filter results
+		// TODO make this alterable by the plugin admin, also add a plugin admin
+		return array_filter( $response, function( $v ) {
+			if ( $v['elected_office'] !== "Mayor") {
+				return $v;
+			}
+		});
+	}
+	// no results returned
+	return false;
 }
 
-/*
+/**
 * @param rep_set - array of associative arrays
 * @param petitioner_data -  associative array
 * @return - associative array
@@ -565,7 +579,7 @@ function pxe_add_districts ( $rep_set, $petitioner_data) {
 	return $petitioner_data;
 }
 
-/*
+/**
 * Adds petitioner data to table
 * @param petitioner_data - associative array
 */
@@ -593,7 +607,8 @@ function pxe_insert_petitioner ( $petitioner_data ) {
 	);
 }
 
-/*
+/**
+* TODO improve process
 * Inserts if new, replaces if already exists
 * @param rep_data - associative array
 */
@@ -630,7 +645,7 @@ function pxe_insert_representative ( $rep_data ) {
 	// );
 }
 
-/*
+/**
 * @param rep_set array : an array of associateive arrays of representatives
 * @param messages number : the value for the corresponding message
 */
@@ -672,7 +687,7 @@ function pxe_send_error( $error_body, $user_data ) {
 	wp_mail( $to, $subject, $body, $headers );
 }
 
-/*
+/**
 * Builds the messages for the applicable message ids
 * @param messages number : an id for the template message
 * @return - string - email message template
