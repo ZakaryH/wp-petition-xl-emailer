@@ -129,8 +129,15 @@ function pxe_main_process() {
 	// sanitize data
 	$petitioner_data = pxe_validate_input( $petitioner_data );
 	// postal code to lat/long coords
-	// EXCEPTION: NO RESPONSE/EMPTY RESPONSE
 	$location = pxe_get_geo_coords( $petitioner_data['postal_code'] );
+	if ( is_null( $location ) ) {
+		pxe_show_client_error("No Response", "Unable to connect to Google maps service.");
+		// send error email w/msg and user info
+	} 
+	if ( !$location ) {
+		pxe_show_client_error("Bad Response", "Unrecognized postal code. Please confirm it is correct. Some newer postal codes may not yet be registered. ");
+		// send error email w/msg and user info
+	}
 	// get reps using lat/long
 	// EXCEPTION: NO RESPONSE/NO REPS FOUND
 	$rep_set = pxe_get_reps( $location->lat, $location->lng );
@@ -416,6 +423,17 @@ function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 	return $filename . '.xlsx';
 }
 
+/**
+* @param string - error type
+* @param string - error message
+*/
+function pxe_show_client_error( $error_type, $error_msg ) {
+	header("HTTP/1.0 434 " . $error_type);
+	echo $error_msg;
+	exit();
+}
+
+
 /*
 * sanitizes data, and returns it or exits with an error message if invalid data
 * @param input_data - assoc array - petitioner's input data
@@ -427,32 +445,24 @@ function pxe_validate_input ( $input_data ) {
 
 	// check if empty name(s)
 	if ( ($input_data['first_name'] === '') || ($input_data['first_name'] === '') ) {
-		header("HTTP/1.0 434 Input Error" );
-		echo "Invalid Name";
-		exit();
+		pxe_show_client_error('Input Error', 'Invalid Name');
 	}
 
 	// check postal code FORMAT ONLY - may still not yield proper results
 	$input_data['postal_code'] = pxe_postal_filter( $input_data['postal_code'] );
 	if ( !$input_data['postal_code'] ) {
-		header("HTTP/1.0 434 Input Error" );
-		echo "Invalid Postal Code";
-		exit();
+		pxe_show_client_error('Input Error', 'Invalid Postal Code');
 	}
 
 	// check email format
 	if ( !filter_var($input_data['email'], FILTER_VALIDATE_EMAIL) ) {
-		header("HTTP/1.0 434 Input Error" );
-		echo "Invalid Email Address";
-		exit();
+		pxe_show_client_error('Input Error', 'Invalid Email Address');
 	}
 
 	// check if each msg is 1 of the 5 accepted values
 	foreach ($input_data['messages'] as $msg) {
 		if ( ($msg !== 'msg_0') && ($msg !== 'msg_1') && ($msg !== 'msg_2') && ($msg !== 'msg_3') && ($msg !== 'msg_4') ) {
-			header("HTTP/1.0 434 Input Error" );
-			echo "Invalid Message Value";
-			exit();		
+			pxe_show_client_error('Input Error', 'Invalid Message Value');
 		}
 	}
 	return $input_data;
@@ -498,14 +508,18 @@ function pxe_get_geo_coords ( $postal_code ) {
 	$url = 'https://maps.googleapis.com/maps/api/geocode/json?components=postal_code:' . $postal_code;
 	
 	$request = wp_remote_get( esc_url_raw( $url ) , array( 'timeout' => 120) );
-	// TODO better error handling?
+	// error getting response from resource
 	if ( is_wp_error( $request ) ) {
-		return false;
+		return null;
 	}
 	$body = wp_remote_retrieve_body( $request );
 	$response = json_decode($body);
-	$location = $response->results[0]->geometry->location;
-	return $location;
+	if ( count( $response->results ) > 0 ) {
+		$location = $response->results[0]->geometry->location;
+		return $location;
+	}
+	// unrecognized postal code
+	return false;
 }
 
 /*
@@ -639,7 +653,7 @@ function pxe_send_error( $error_body, $user_data ) {
 	// send an email to admin with description of error
 	// and user data 
 	$to = 'yegfootball@gmail.com';
-	$subject = 'YEG Soccer Petition';
+	$subject = 'Form Error';
 	$body = "<p>$error_body</p>" ;
 	$headers[] = 'Content-Type: text/html';
 	$headers[] = 'charset=UTF-8';
