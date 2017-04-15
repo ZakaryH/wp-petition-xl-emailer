@@ -132,11 +132,13 @@ function pxe_main_process() {
 	$location = pxe_get_geo_coords( $petitioner_data['postal_code'] );
 	if ( is_null( $location ) ) {
 		pxe_show_client_error("No Response", "Unable to connect to Google maps service.");
-		// send error email w/msg and user info
+		pxe_send_error( 'Unable to connect to Google maps service.', $petitioner_data );
+		exit();
 	} 
 	if ( !$location ) {
 		pxe_show_client_error("Bad Response", "Unrecognized postal code. Please confirm it is correct. Some newer postal codes may not yet be registered. ");
-		// send error email w/msg and user info
+		pxe_send_error( 'Unrecognized postal code', $petitioner_data );
+		exit();
 	}
 	// get reps using lat/long
 	// EXCEPTION: NO RESPONSE/NO REPS FOUND
@@ -430,7 +432,6 @@ function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 function pxe_show_client_error( $error_type, $error_msg ) {
 	header("HTTP/1.0 434 " . $error_type);
 	echo $error_msg;
-	exit();
 }
 
 
@@ -446,23 +447,27 @@ function pxe_validate_input ( $input_data ) {
 	// check if empty name(s)
 	if ( ($input_data['first_name'] === '') || ($input_data['first_name'] === '') ) {
 		pxe_show_client_error('Input Error', 'Invalid Name');
+		exit();
 	}
 
 	// check postal code FORMAT ONLY - may still not yield proper results
 	$input_data['postal_code'] = pxe_postal_filter( $input_data['postal_code'] );
 	if ( !$input_data['postal_code'] ) {
 		pxe_show_client_error('Input Error', 'Invalid Postal Code');
+		exit();
 	}
 
 	// check email format
 	if ( !filter_var($input_data['email'], FILTER_VALIDATE_EMAIL) ) {
 		pxe_show_client_error('Input Error', 'Invalid Email Address');
+		exit();
 	}
 
 	// check if each msg is 1 of the 5 accepted values
 	foreach ($input_data['messages'] as $msg) {
 		if ( ($msg !== 'msg_0') && ($msg !== 'msg_1') && ($msg !== 'msg_2') && ($msg !== 'msg_3') && ($msg !== 'msg_4') ) {
 			pxe_show_client_error('Input Error', 'Invalid Message Value');
+			exit();
 		}
 	}
 	return $input_data;
@@ -650,11 +655,18 @@ function pxe_send_email( $rep_set, $petitioner_data ) {
 }
 
 function pxe_send_error( $error_body, $user_data ) {
-	// send an email to admin with description of error
-	// and user data 
 	$to = 'yegfootball@gmail.com';
 	$subject = 'Form Error';
-	$body = "<p>$error_body</p>" ;
+	$body = "<b>$error_body</b>
+		<p>First Name: " . $user_data['first_name'] . "</p>
+		<p>Last Name: " . $user_data['last_name'] . "</p>
+		<p>Postal Code: " . $user_data['postal_code'] . "</p>
+		<p>Email: " . $user_data['email'] . "</p>
+		<p>Messages: " ;
+	foreach ($user_data['messages'] as $msg) {
+		$body .= "$msg ";
+	}
+	$body .= "</p>";
 	$headers[] = 'Content-Type: text/html';
 	$headers[] = 'charset=UTF-8';
 	wp_mail( $to, $subject, $body, $headers );
