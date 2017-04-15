@@ -440,6 +440,7 @@ function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 * @param string - error type
 * @param string - error message
 */
+// TODO parameter for error code?
 function pxe_show_client_error( $error_type, $error_msg ) {
 	header("HTTP/1.0 434 " . $error_type);
 	echo $error_msg;
@@ -454,16 +455,19 @@ function pxe_show_client_error( $error_type, $error_msg ) {
 function pxe_validate_input ( $input_data ) {
 	$input_data['first_name'] = trim( strip_tags($input_data['first_name']) );
 	$input_data['last_name'] = trim( strip_tags($input_data['last_name']) );
-
+	// TODO remove special chars?
 	// check if empty name(s)
-	if ( ($input_data['first_name'] === '') || ($input_data['first_name'] === '') ) {
+	if ( ($input_data['first_name'] === '') || ($input_data['last_name'] === '') ) {
 		pxe_show_client_error('Input Error', 'Invalid Name');
 		exit();
 	}
 
 	// check postal code FORMAT ONLY - may still not yield proper results
 	$input_data['postal_code'] = pxe_postal_filter( $input_data['postal_code'] );
-	if ( !$input_data['postal_code'] ) {
+	if ( is_null( $input_data['postal_code'] ) ) {
+		pxe_show_client_error('Input Error', 'We appreciate your support, but only Edmonton residents can petitioner their representatives');
+		exit();
+	} elseif ( !$input_data['postal_code'] ) {
 		pxe_show_client_error('Input Error', 'Invalid Postal Code');
 		exit();
 	}
@@ -488,20 +492,31 @@ function pxe_validate_input ( $input_data ) {
 * @param postalCode - string
 * @return uppercased string with spaces removed, or false
 */
+// TODO consistent return values
 function pxe_postal_filter ($postalCode) {
 	$postalCode = (string) $postalCode;
 	$postalCode = trim($postalCode);
     $pattern = '/([ABCEGHJKLMNPRSTVXY]\d)([ABCEGHJKLMNPRSTVWXYZ]\d){2}/i';
     $space_pattern = '/\s/g';
+    // TODO admin variable
+	$allowed_codes = ['T5A','T6A','T5B','T6B','T5C','T6C','T5E','T6E','T5G','T6G','T5H','T6H','T5J','T6J','T5K','T6K','T5L','T6L','T5M','T6M','T5N','T6N','T5P','T6P','T5R','T6R','T5S','T6S','T5T','T6T','T5V','T6V','T5W','T6W','T5X','T6X','T5Y','T5Z'
+    ];
 
     if ($postalCode === '') {
         return false;
     }
     // remove spaces
     $postalCode = preg_replace('/\s+/', '', $postalCode);
-
     if (preg_match($pattern, $postalCode)) {
-    	return strtoupper( $postalCode );    
+    	// only Edmonton accepted
+	    foreach ($allowed_codes as $code) {
+	        $reg = '#^' . $code . '(.*)$#i';
+	        if( preg_match($reg, $postalCode) ) {
+		    	return strtoupper( $postalCode );    
+	        }
+	    }
+	    // matches pattern, but not Edmonton
+		return null;
     }
     return false;
 }

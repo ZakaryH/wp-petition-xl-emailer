@@ -4,6 +4,8 @@
 
 A Wordpress plugin that takes a (Canadian) user's postal code, and finds their local MLA, MP and City Councillor. User's information is stored, and later written to a spreadsheet with any others sharing the same representative and the dynamically generated .xlsx file is attached to an email sent to each representative.
 
+Uses [OpenNorth's Represent API](https://represent.opennorth.ca/api/), [Google Maps Geocode API](https://developers.google.com/maps/documentation/geocoding/start), and [PHP XLSXWriter](https://github.com/mk-j/PHP_XLSXWriter).
+
 Made to allow users to petition and endorse a specific cause via email. Still in development to make it usable for more than one case.
 
 ## Configuration
