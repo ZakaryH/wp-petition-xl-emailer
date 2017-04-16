@@ -19,8 +19,8 @@
 defined( 'ABSPATH' ) or exit;
 
 // TODO admin section
-// TODO reusable functions
-// TODO error handling
+// TODO reduce msg_x to x
+// TODO cleanup & optimization
 global $pxe_db_version;
 $pxe_db_version = '1.0';
 include_once( plugin_dir_path( __FILE__ ) . '/PHP_XLSXWriter-master/xlsxwriter.class.php');
@@ -63,8 +63,6 @@ function pxe_activation() {
 		PRIMARY KEY  (p_id)
 	) $charset_collate;";
 
-	// TODO look at the rep_id, it's not really being used, and changes a lot
-	// the office_and_districts is unique, and sort of serves that purpose
 	$sql2 = "CREATE TABLE $table_name_two (
 		rep_id mediumint(9) NOT NULL AUTO_INCREMENT,
 		office_and_district varchar(180) NOT NULL,
@@ -155,8 +153,7 @@ function pxe_main_process() {
 	// add districts from rep data to petitioner data
 	$petitioner_data = pxe_add_districts( $rep_set, $petitioner_data );
 	// pass reps to client side for success message
-	$output = array_values( $rep_set );
-	echo json_encode( $output );
+	echo json_encode( array_values( $rep_set ) );
 	// add data to tables
 	pxe_insert_petitioner( $petitioner_data );
 	foreach ($rep_set as $rep_data) {
@@ -466,7 +463,7 @@ function pxe_validate_input ( $input_data ) {
 	// check postal code FORMAT ONLY - may still not yield proper results
 	$input_data['postal_code'] = pxe_postal_filter( $input_data['postal_code'] );
 	if ( is_null( $input_data['postal_code'] ) ) {
-		pxe_show_client_error('Input Error', 'We appreciate your support, but only Edmonton residents can petitioner their representatives');
+		pxe_show_client_error('Input Error', 'We appreciate your support, but this service is only for Edmonton residents.');
 		exit();
 	} elseif ( !$input_data['postal_code'] ) {
 		pxe_show_client_error('Input Error', 'Invalid Postal Code');
@@ -479,15 +476,32 @@ function pxe_validate_input ( $input_data ) {
 		exit();
 	}
 
-	// check if each msg is 1 of the 5 accepted values
+	// check if each msg is one of the accepted values
 	foreach ($input_data['messages'] as $msg) {
-		if ( ($msg !== 'msg_0') && ($msg !== 'msg_1') && ($msg !== 'msg_2') && ($msg !== 'msg_3') && ($msg !== 'msg_4') && ($msg !== 'msg_5') ) {
+		if ( 
+			($msg !== 'msg_0') 
+			&& ($msg !== 'msg_1') 
+			&& ($msg !== 'msg_2') 
+			&& ($msg !== 'msg_3') 
+			&& ($msg !== 'msg_4') 
+			&& ($msg !== 'msg_5') 
+			&& ($msg !== 'msg_6') 
+		) 
+		{
 			pxe_show_client_error('Input Error', 'Invalid Message Value');
 			exit();
 		}
 	}
 
-	if ( ($input_data['association'] !== 'unknown') && ($input_data['association'] !== 'parent') && ($input_data['association'] !== 'coach') && ($input_data['association'] !== 'player') && ($input_data['association'] !== 'other') ) {
+	// check if association is one of the accepted values
+	if ( 
+		($input_data['association'] !== 'unknown') 
+		&& ($input_data['association'] !== 'parent') 
+		&& ($input_data['association'] !== 'coach') 
+		&& ($input_data['association'] !== 'player') 
+		&& ($input_data['association'] !== 'other') 
+	) 
+	{
 		pxe_show_client_error('Input Error', 'Invalid Association Value');
 		exit();
 	}
@@ -674,8 +688,6 @@ function pxe_insert_representative ( $rep_data ) {
 // TODO make into a generic email function
 function pxe_send_email( $rep_set, $petitioner_data ) {
 	// $message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['first_name'], $petitioner_data['last_name'] );
-
-	// send out 3 emails
 		$to = 'yegfootball@gmail.com';
 		$subject = 'YEG Soccer Petition';
 		$body = $message_template;
@@ -709,6 +721,7 @@ function pxe_send_error( $error_body, $user_data ) {
 * @param messages number : an id for the template message
 * @return - string - email message template
 */
+// TODO update messages, or scrap this function entirely
 function pxe_get_template_email( $messages, $first_name, $last_name ) {
 	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $first_name $last_name that has identified they live in your constituency.</p>";
 	$message .= "<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>";
@@ -716,15 +729,18 @@ function pxe_get_template_email( $messages, $first_name, $last_name ) {
 	foreach ($messages as $msg_id) {
 		switch ( $msg_id ) {
 			case 'msg_1':
-				$message .= "<p>Edmonton has a successful Professional Soccer Club called FC Edmonton founded in 2010, by Tom and Dave Fath. They have coordinated important events for our city including a memorial for Constable Daniel Woodall (a big soccer fan).  Their logo was designed with Edmonton colors in mind, and play in an Edmonton Eskimos branded facility.  We believe they need more support to be as successful as they should be in our sports crazy city.</p>";
+				$message .= "<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quia, velit.</p>";
 				break;
 			case 'msg_2':
 				$message .= "<p>As it stands today soccer is implicitly not allowed in City of Edmonton recreational facility gyms.  We believe the new template for recreational facilities needs to have provisions for citizens to practice and play the overwhelmingly popular sport of Soccer.</p>";
 				break;
 			case 'msg_3':
-				$message .= "<p>We are already extremely behind in capacity for soccer facilities and we need to catch up in order to meet demand.  We also need to ensure that the success of facilities are not based on capacity alone, the facilities need to be accessible, affordable and of a high quality.  To achieve this ambitious but necessary result we need a comprehensive, well thought out and community engaged plan that will allow us to address issues such as boarded vs non.</p>";
+				$message .= "<p>Edmonton has a successful Professional Soccer Club called FC Edmonton founded in 2010, by Tom and Dave Fath. They have coordinated important events for our city including a memorial for Constable Daniel Woodall (a big soccer fan).  Their logo was designed with Edmonton colors in mind, and play in an Edmonton Eskimos branded facility.  We believe they need more support to be as successful as they should be in our sports crazy city.</p>";
 				break;
 			case 'msg_4':
+				$message .= "<p>We are already extremely behind in capacity for soccer facilities and we need to catch up in order to meet demand.  We also need to ensure that the success of facilities are not based on capacity alone, the facilities need to be accessible, affordable and of a high quality.  To achieve this ambitious but necessary result we need a comprehensive, well thought out and community engaged plan that will allow us to address issues such as boarded vs non.</p>";
+				break;
+			case 'msg_5':
 				$message .= "<p>I support collaboration with local Soccer clubs to meet the needs of the sport in Edmonton. There are several local clubs that are looking to develop indoor facilities for their teams because of the significant lack of indoor facilities in the Edmonton area.  They need your support.  There are a number of open minded leagues, clubs, facility operators that are willing to coordinate to serve the greater community in collaboration with government entities to make things happen in our wonderful winter city.</p>";
 				break;
 			default:
@@ -750,7 +766,7 @@ function pxe_create_form(){
 	$checkbox_data = array(
 		array(
 			'label' => 'Minor soccer in Edmonton',
-			'content' => 'Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quia, velit.'
+			'content' => 'With 44% of all children playing soccer, it is the greatest and earliest opportunity to teach kids about the benefits of sport, it is important that we provide them safe, quality, accessible and affordable places to pla'
 		),
 		array(
 			'label' => 'City of Edmonton including indoor soccer fields in their Recreational Facility',
@@ -767,6 +783,10 @@ function pxe_create_form(){
 		array(
 			'label' => 'Collaboration with local soccer clubs to plan, build and maintain indoor soccer facilities',
 			'content' => 'I support collaboration with local Soccer clubs to meet the needs of the sport in Edmonton. There are several local clubs that are looking to develop indoor facilities for their teams because of the significant lack of indoor facilities in the Edmonton area.  They need your support.  There are a number of open minded leagues, clubs, facility operators that are willing to coordinate to serve the greater community in collaboration with government entities to make things happen in our wonderful winter city.'
+		),
+		array(
+			'label' => 'The formation of a Canadian Premier League',
+			'content' => 'Rumor has it that a NHL/CFL owner backed Premier League will be launching in Canada as soon as 2018, founded, staffed by and for the benefit of Canadian players, coaches, and administrators. This is important to the development of our youth and providing full time soccer jobs to Canadians in Canada.'
 		)
 	);		
 
