@@ -47,6 +47,7 @@ jQuery(document).ready( function($) {
     var firstName = e.srcElement['first_name'].value;
     var lastName = e.srcElement['last_name'].value;
     var userEmail = e.srcElement['user_email'].value;
+    var association = e.srcElement['association'].value;
     // make an array of the checked checkboxes
     var userMessages = jQuery(".rep-petition-form input:checkbox:checked").map(function(){
       return jQuery(this).val();
@@ -67,7 +68,7 @@ jQuery(document).ready( function($) {
     } else if ( lastName === '' ) {
       showErrors( "Invalid last name" );
     } else {
-      pxe_plugin_init( postalCode, firstName, lastName, userEmail, userMessages );
+      pxe_plugin_init( postalCode, firstName, lastName, userEmail, userMessages, association );
     }
     return false;
   }
@@ -83,11 +84,11 @@ jQuery(document).ready( function($) {
   /*--------------------------------Plugin Functions-----------------------------------------*/
 
   // pass user input to the plugin, handle the response
-  function pxe_plugin_init ( postalCode, firstName, lastName, email, messages) {
+  function pxe_plugin_init ( postalCode, firstName, lastName, email, messages, association) {
     var siteUrl = document.getElementById("siteUrl").value;
 
     jQuery(".load-container").append( "<div class='load-spinner'></div>" );
-    jQuery("input").prop('disabled', true);
+    jQuery("#rep-petition-form input").prop('disabled', true);
      jQuery.ajax({
       type:'POST',
       data:{
@@ -96,7 +97,8 @@ jQuery(document).ready( function($) {
         firstName: firstName,
         lastName: lastName,
         email: email,
-        messages: messages
+        messages: messages,
+        association: association
       },
       url: siteUrl + "/wp-admin/admin-ajax.php",
       success: function(value) {
@@ -106,7 +108,7 @@ jQuery(document).ready( function($) {
       },
       error: function(error) {
         // display errors
-        jQuery("input").prop('disabled', false);
+        jQuery("#rep-petition-form input").prop('disabled', false);
         jQuery(".load-spinner").remove();
         showErrors( error.responseText );
       }

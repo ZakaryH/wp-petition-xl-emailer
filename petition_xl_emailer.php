@@ -59,6 +59,7 @@ function pxe_activation() {
 		new_entry tinyint(1) DEFAULT 1 NOT NULL,
 		message varchar(255) NOT NULL,
 		postal varchar(255) NOT NULL,
+		association varchar(255) NOT NULL,
 		PRIMARY KEY  (p_id)
 	) $charset_collate;";
 
@@ -124,6 +125,7 @@ function pxe_main_process() {
 		'first_name' => $_POST['firstName'],
 		'last_name' => $_POST['lastName'],
 		'messages' => $_POST['messages'],
+		'association' => $_POST['association']
 		);
 
 	// sanitize data
@@ -182,7 +184,7 @@ function pxe_cron_process() {
 
 		$results = $wpdb->get_results(
 			"
-			SELECT first_name, last_name, email, mp_district, mla_district, council_district, postal, message, new_entry 
+			SELECT first_name, last_name, email, mp_district, mla_district, council_district, postal, message, association, new_entry 
 			FROM {$wpdb->prefix}pxe_petitioners
 			", ARRAY_A
 		);
@@ -375,7 +377,8 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 				"mla_district" => $petitioner['mla_district'],
 				"mp_district" => $petitioner['mp_district'],
 				"council_district" => $petitioner['council_district'],
-				"message" => $petitioner['message']
+				"message" => $petitioner['message'],
+				"association" => $petitioner['association']
 			);
 		// }
 	}
@@ -400,7 +403,8 @@ function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 		'MLA District' => 'string',
 		'MP District' => 'string',
 		'Council District' => 'string',
-		'Messages' => 'string'
+		'Messages' => 'string',
+		'Association' => 'string'
 	);
 	$writer = new XLSXWriter();
 
@@ -481,6 +485,11 @@ function pxe_validate_input ( $input_data ) {
 			pxe_show_client_error('Input Error', 'Invalid Message Value');
 			exit();
 		}
+	}
+
+	if ( ($input_data['association'] !== 'unknown') && ($input_data['association'] !== 'parent') && ($input_data['association'] !== 'coach') && ($input_data['association'] !== 'player') && ($input_data['association'] !== 'other') ) {
+		pxe_show_client_error('Input Error', 'Invalid Association Value');
+		exit();
 	}
 	return $input_data;
 }
@@ -614,7 +623,8 @@ function pxe_insert_petitioner ( $petitioner_data ) {
 			'mla_district' => $petitioner_data['MLA'], 
 			'council_district' => $petitioner_data['Councillor'], 
 			'message' => $comma_separated, 
-			'postal' => $petitioner_data['postal_code'] 
+			'postal' => $petitioner_data['postal_code'],
+			'association' => $petitioner_data['association']
 		) 
 	);
 }
@@ -735,7 +745,7 @@ add_shortcode('show_pxe_form', 'pxe_create_form');
 function pxe_create_form(){
 	// enqueue script where the shortcode form appears
 	wp_enqueue_script( 'main', plugins_url( '/main.js', __FILE__ ), array('jquery'), '1.0', true );
-	
+
 	// form checkbox and display values
 	$checkbox_data = array(
 		array(
@@ -766,20 +776,30 @@ function pxe_create_form(){
 	<div class="load-container"></div>
 	<div class="form-half first-half">
 		<div class="form-group">
-			<label for="first_name">First Name</label>
+			<label for="first_name">First Name*</label>
 			<input class="form-control" type="text" id="first_name" name="first_name" autocomplete="off" placeholder="Your first name" required>
 		</div>
 		<div class="form-group">
-			<label for="last_name">Last Name</label>
+			<label for="last_name">Last Name*</label>
 			<input class="form-control" type="text" id="last_name" name="last_name" autocomplete="off" placeholder="Your last name" required>
 		</div>
 		<div class="form-group">
-			<label for="user_email">Email</label>
+			<label for="user_email">Email*</label>
 			<input class="form-control" type="email" id="user_email" name="user_email" autocomplete="off" placeholder="address@example.com" required>
 		</div>
 		<div class="form-group">
-			<label for="postal_code">Postal Code</label>
+			<label for="postal_code">Postal Code*</label>
 			<input class="form-control" type="text" id="postal_code" name="postal_code" autocomplete="off" placeholder="Your postal code" required>
+		</div>
+		<div class="form-group">
+			<label for="association">Association</label>
+			<select name="association" id="association">
+				<option value="unknown" default>-- Choose --</option>
+				<option value="parent">Parent</option>
+				<option value="coach">Coach</option>
+				<option value="player">Player</option>
+				<option value="other">Other</option>
+			</select>
 		</div>
 		<input type="submit" value="Submit" class="btn btn-warning btn-block">
 	</div>
