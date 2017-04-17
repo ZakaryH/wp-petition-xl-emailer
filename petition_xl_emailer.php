@@ -21,6 +21,7 @@ defined( 'ABSPATH' ) or exit;
 // TODO admin section
 // TODO reduce msg_x to x
 // TODO cleanup & optimization
+// TODO add legend
 global $pxe_db_version;
 $pxe_db_version = '1.0';
 include_once( plugin_dir_path( __FILE__ ) . '/PHP_XLSXWriter-master/xlsxwriter.class.php');
@@ -139,7 +140,7 @@ function pxe_main_process() {
 		pxe_send_error( 'Unrecognized postal code', $petitioner_data );
 		exit();
 	}
-	// get reps using lat/long
+
 	$rep_set = pxe_get_reps( $location->lat, $location->lng );
 	if ( is_null( $rep_set ) ) {
 		pxe_show_client_error("No Response", "Unable to connect to Represent service.");
@@ -479,13 +480,13 @@ function pxe_validate_input ( $input_data ) {
 	// check if each msg is one of the accepted values
 	foreach ($input_data['messages'] as $msg) {
 		if ( 
-			($msg !== 'msg_0') 
-			&& ($msg !== 'msg_1') 
-			&& ($msg !== 'msg_2') 
-			&& ($msg !== 'msg_3') 
-			&& ($msg !== 'msg_4') 
-			&& ($msg !== 'msg_5') 
-			&& ($msg !== 'msg_6') 
+			($msg !== '0') 
+			&& ($msg !== '1') 
+			&& ($msg !== '2') 
+			&& ($msg !== '3') 
+			&& ($msg !== '4') 
+			&& ($msg !== '5') 
+			&& ($msg !== '6') 
 		) 
 		{
 			pxe_show_client_error('Input Error', 'Invalid Message Value');
@@ -624,7 +625,7 @@ function pxe_insert_petitioner ( $petitioner_data ) {
 	if ( count( $petitioner_data['messages'] ) > 0 ) {
 		$comma_separated = implode(",", $petitioner_data['messages']);
 	} else {
-		$comma_separated = "msg_0";
+		$comma_separated = "0";
 	}
 	
 	$wpdb->insert( 
@@ -726,21 +727,21 @@ function pxe_get_template_email( $messages, $first_name, $last_name ) {
 	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $first_name $last_name that has identified they live in your constituency.</p>";
 	$message .= "<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>";
 
-	foreach ($messages as $msg_id) {
-		switch ( $msg_id ) {
-			case 'msg_1':
+	foreach ($messages as $id) {
+		switch ( $id ) {
+			case '1':
 				$message .= "<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quia, velit.</p>";
 				break;
-			case 'msg_2':
+			case '2':
 				$message .= "<p>As it stands today soccer is implicitly not allowed in City of Edmonton recreational facility gyms.  We believe the new template for recreational facilities needs to have provisions for citizens to practice and play the overwhelmingly popular sport of Soccer.</p>";
 				break;
-			case 'msg_3':
+			case '3':
 				$message .= "<p>Edmonton has a successful Professional Soccer Club called FC Edmonton founded in 2010, by Tom and Dave Fath. They have coordinated important events for our city including a memorial for Constable Daniel Woodall (a big soccer fan).  Their logo was designed with Edmonton colors in mind, and play in an Edmonton Eskimos branded facility.  We believe they need more support to be as successful as they should be in our sports crazy city.</p>";
 				break;
-			case 'msg_4':
+			case '4':
 				$message .= "<p>We are already extremely behind in capacity for soccer facilities and we need to catch up in order to meet demand.  We also need to ensure that the success of facilities are not based on capacity alone, the facilities need to be accessible, affordable and of a high quality.  To achieve this ambitious but necessary result we need a comprehensive, well thought out and community engaged plan that will allow us to address issues such as boarded vs non.</p>";
 				break;
-			case 'msg_5':
+			case '5':
 				$message .= "<p>I support collaboration with local Soccer clubs to meet the needs of the sport in Edmonton. There are several local clubs that are looking to develop indoor facilities for their teams because of the significant lack of indoor facilities in the Edmonton area.  They need your support.  There are a number of open minded leagues, clubs, facility operators that are willing to coordinate to serve the greater community in collaboration with government entities to make things happen in our wonderful winter city.</p>";
 				break;
 			default:
@@ -821,14 +822,19 @@ function pxe_create_form(){
 				<option value="other">Other</option>
 			</select>
 		</div>
-		<input type="submit" value="Submit" class="btn btn-warning btn-block">
+		<div class="form-group">
+			<input type="submit" value="Submit" class="btn btn-warning btn-block">
+		</div>
+		<p class="petition-disclaimer">
+			The information you are submitting will only be used for purposes of advocating for soccer in Edmonton
+		</p>
 	</div>
 	<div class="form-half second-half">
 		<h4>I Support...</h4>
 	<?php
 		foreach ($checkbox_data as $i => $data) {
 			echo "<div class='form-group'>";
-			echo "<input checked='true' type='checkbox' id='template_msg_" . ($i + 1) . "' value='msg_" . ($i + 1) . "' data-msg='" . $data['content'] . "'>";
+			echo "<input checked='true' type='checkbox' id='template_msg_" . ($i + 1) . "' value='" . ($i + 1) . "' data-msg='" . $data['content'] . "'>";
 			echo "<label class='inline-label' for='template_msg_" . ($i + 1) . "'>" . $data['label'] . "</label>";
 			echo "</div>"; 
 		}
