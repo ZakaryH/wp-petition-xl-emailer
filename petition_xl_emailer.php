@@ -19,7 +19,6 @@
 defined( 'ABSPATH' ) or exit;
 
 // TODO admin section
-// TODO reduce msg_x to x
 // TODO cleanup & optimization
 // TODO add legend
 global $pxe_db_version;
@@ -61,6 +60,7 @@ function pxe_activation() {
 		message varchar(255) NOT NULL,
 		postal varchar(255) NOT NULL,
 		association varchar(255) NOT NULL,
+		formatted_address varchar(255) NOT NULL,
 		PRIMARY KEY  (p_id)
 	) $charset_collate;";
 
@@ -141,24 +141,39 @@ function pxe_main_process() {
 		exit();
 	}
 
-	$rep_set = pxe_get_reps( $location->lat, $location->lng );
-	if ( is_null( $rep_set ) ) {
-		pxe_show_client_error("No Response", "Unable to connect to Represent service.");
-		pxe_send_error( 'Unable to connect to Represent service.', $petitioner_data );
-		exit();
-	} elseif ( !$rep_set ) {
-		pxe_show_client_error("Empty Response", "No representatives found for that postal code.");
-		pxe_send_error( 'No representatives found for that postal code.', $petitioner_data );
-		exit();
-	}
-	// add districts from rep data to petitioner data
-	$petitioner_data = pxe_add_districts( $rep_set, $petitioner_data );
-	// pass reps to client side for success message
-	echo json_encode( array_values( $rep_set ) );
-	// add data to tables
-	pxe_insert_petitioner( $petitioner_data );
-	foreach ($rep_set as $rep_data) {
-		pxe_insert_representative( $rep_data );
+	$petitioner_data['formatted_address'] = $location->formatted_address;
+
+	// petitioner has edmonton postal code
+	if ( !$petitioner_data['other'] ) {
+		$rep_set = pxe_get_reps( $location->lat, $location->lng );
+		if ( is_null( $rep_set ) ) {
+			pxe_show_client_error("No Response", "Unable to connect to Represent service.");
+			pxe_send_error( 'Unable to connect to Represent service.', $petitioner_data );
+			exit();
+		} elseif ( !$rep_set ) {
+			pxe_show_client_error("Empty Response", "No representatives found for that postal code.");
+			pxe_send_error( 'No representatives found for that postal code.', $petitioner_data );
+			exit();
+		}
+		// add districts from rep data to petitioner data
+		$petitioner_data = pxe_add_districts( $rep_set, $petitioner_data );
+		// pass reps to client side for success message
+		echo json_encode( array_values( $rep_set ) );
+		// add data to tables
+		pxe_insert_petitioner( $petitioner_data );
+		foreach ($rep_set as $rep_data) {
+			pxe_insert_representative( $rep_data );
+		}
+	} else {
+		// outside of edmonton
+		$rep_set = array(
+			'other' => true
+		);
+		$petitioner_data['MLA'] = 'other';
+		$petitioner_data['MP'] = 'other';
+		$petitioner_data['Councillor'] = 'other';
+		echo json_encode( $rep_set );
+		pxe_insert_petitioner( $petitioner_data );
 	}
 	die();	
 }
@@ -182,7 +197,7 @@ function pxe_cron_process() {
 
 		$results = $wpdb->get_results(
 			"
-			SELECT first_name, last_name, email, mp_district, mla_district, council_district, postal, message, association, new_entry 
+			SELECT first_name, last_name, email, mp_district, mla_district, council_district, postal, message, association, new_entry, formatted_address 
 			FROM {$wpdb->prefix}pxe_petitioners
 			", ARRAY_A
 		);
@@ -213,6 +228,7 @@ function pxe_cron_process() {
 							$email_index = "MP-$district_name";
 							break;
 					}
+					// TODO clean up/modularize these email calls
 					// rep emails
 					$file_name = $district_type . "-" . $district_name;
 					$files_created[] = pxe_write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $file_name );
@@ -376,7 +392,8 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 				"mp_district" => $petitioner['mp_district'],
 				"council_district" => $petitioner['council_district'],
 				"message" => $petitioner['message'],
-				"association" => $petitioner['association']
+				"association" => $petitioner['association'],
+				"formatted_address" => $petitioner['formatted_address']
 			);
 		// }
 	}
@@ -402,7 +419,8 @@ function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 		'MP District' => 'string',
 		'Council District' => 'string',
 		'Messages' => 'string',
-		'Association' => 'string'
+		'Association' => 'string',
+		'Address' => 'string'
 	);
 	$writer = new XLSXWriter();
 
@@ -423,13 +441,13 @@ function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
 	try {
 		$writer->writeToFile( plugin_dir_path( __FILE__ ) . '/files/' . $filename . '.xlsx');
 	} catch (Exception $e) {
+		// TODO re-usable email function
 		$to = 'yegfootball@gmail.com';
 		$subject = 'YEG Soccer Petition';
 		$body = "Error: " . $e->getMessage() ;
 		$headers[] = 'Content-Type: text/html';
 		$headers[] = 'charset=UTF-8';
 		wp_mail( $to, $subject, $body, $headers );
-		// echo $e;	
 	}
 
 	return $filename . '.xlsx';
@@ -452,22 +470,13 @@ function pxe_show_client_error( $error_type, $error_msg ) {
 * @return assoc array of validated and formatted data
 */
 function pxe_validate_input ( $input_data ) {
+	$edm_codes = ['T5A','T6A','T5B','T6B','T5C','T6C','T5E','T6E','T5G','T6G','T5H','T6H','T5J','T6J','T5K','T6K','T5L','T6L','T5M','T6M','T5N','T6N','T5P','T6P','T5R','T6R','T5S','T6S','T5T','T6T','T5V','T6V','T5W','T6W','T5X','T6X','T5Y','T5Z'];
 	$input_data['first_name'] = trim( strip_tags($input_data['first_name']) );
 	$input_data['last_name'] = trim( strip_tags($input_data['last_name']) );
 	// TODO remove special chars?
 	// check if empty name(s)
 	if ( ($input_data['first_name'] === '') || ($input_data['last_name'] === '') ) {
 		pxe_show_client_error('Input Error', 'Invalid Name');
-		exit();
-	}
-
-	// check postal code FORMAT ONLY - may still not yield proper results
-	$input_data['postal_code'] = pxe_postal_filter( $input_data['postal_code'] );
-	if ( is_null( $input_data['postal_code'] ) ) {
-		pxe_show_client_error('Input Error', 'We appreciate your support, but this service is only for Edmonton residents.');
-		exit();
-	} elseif ( !$input_data['postal_code'] ) {
-		pxe_show_client_error('Input Error', 'Invalid Postal Code');
 		exit();
 	}
 
@@ -506,7 +515,25 @@ function pxe_validate_input ( $input_data ) {
 		pxe_show_client_error('Input Error', 'Invalid Association Value');
 		exit();
 	}
-	return $input_data;
+
+	// check postal code FORMAT ONLY - may still not yield proper results
+	$input_data['postal_code'] = pxe_postal_filter( $input_data['postal_code'] );
+	if ( !$input_data['postal_code'] ) {
+		pxe_show_client_error('Input Error', 'Invalid Postal Code');
+		exit();
+	}
+	// TODO handle this better
+    foreach ($edm_codes as $code) {
+        $reg = '#^' . $code . '(.*)$#i';
+        // matches edmonton, stop
+        if( preg_match($reg, $input_data['postal_code']) ) {
+        	$input_data['other'] = false;
+			return $input_data;
+        }
+    }
+    // outside edmonton
+    $input_data['other'] = true;
+    return $input_data;
 }
 
 /**
@@ -519,9 +546,6 @@ function pxe_postal_filter ($postalCode) {
 	$postalCode = trim($postalCode);
     $pattern = '/([ABCEGHJKLMNPRSTVXY]\d)([ABCEGHJKLMNPRSTVWXYZ]\d){2}/i';
     $space_pattern = '/\s/g';
-    // TODO admin variable
-	$allowed_codes = ['T5A','T6A','T5B','T6B','T5C','T6C','T5E','T6E','T5G','T6G','T5H','T6H','T5J','T6J','T5K','T6K','T5L','T6L','T5M','T6M','T5N','T6N','T5P','T6P','T5R','T6R','T5S','T6S','T5T','T6T','T5V','T6V','T5W','T6W','T5X','T6X','T5Y','T5Z'
-    ];
 
     if ($postalCode === '') {
         return false;
@@ -529,15 +553,7 @@ function pxe_postal_filter ($postalCode) {
     // remove spaces
     $postalCode = preg_replace('/\s+/', '', $postalCode);
     if (preg_match($pattern, $postalCode)) {
-    	// only Edmonton accepted
-	    foreach ($allowed_codes as $code) {
-	        $reg = '#^' . $code . '(.*)$#i';
-	        if( preg_match($reg, $postalCode) ) {
-		    	return strtoupper( $postalCode );    
-	        }
-	    }
-	    // matches pattern, but not Edmonton
-		return null;
+		return strtoupper( $postalCode );    
     }
     return false;
 }
@@ -568,6 +584,7 @@ function pxe_get_geo_coords ( $postal_code ) {
 	$response = json_decode($body);
 	if ( count( $response->results ) > 0 ) {
 		$location = $response->results[0]->geometry->location;
+		$location->formatted_address = $response->results[0]->formatted_address;
 		return $location;
 	}
 	// unrecognized postal code
@@ -639,7 +656,8 @@ function pxe_insert_petitioner ( $petitioner_data ) {
 			'council_district' => $petitioner_data['Councillor'], 
 			'message' => $comma_separated, 
 			'postal' => $petitioner_data['postal_code'],
-			'association' => $petitioner_data['association']
+			'association' => $petitioner_data['association'],
+			'formatted_address' => $petitioner_data['formatted_address']
 		) 
 	);
 }
@@ -688,7 +706,6 @@ function pxe_insert_representative ( $rep_data ) {
 */
 // TODO make into a generic email function
 function pxe_send_email( $rep_set, $petitioner_data ) {
-	// $message_template = pxe_get_template_email( $petitioner_data['messages'], $petitioner_data['first_name'], $petitioner_data['last_name'] );
 		$to = 'yegfootball@gmail.com';
 		$subject = 'YEG Soccer Petition';
 		$body = $message_template;
@@ -717,42 +734,6 @@ function pxe_send_error( $error_body, $user_data ) {
 	wp_mail( $to, $subject, $body, $headers );
 }
 
-/**
-* Builds the messages for the applicable message ids
-* @param messages number : an id for the template message
-* @return - string - email message template
-*/
-// TODO update messages, or scrap this function entirely
-function pxe_get_template_email( $messages, $first_name, $last_name ) {
-	$message = "<p>This email was sent to you by YEG Soccer on behalf of: $first_name $last_name that has identified they live in your constituency.</p>";
-	$message .= "<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>";
-
-	foreach ($messages as $id) {
-		switch ( $id ) {
-			case '1':
-				$message .= "<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit. Quia, velit.</p>";
-				break;
-			case '2':
-				$message .= "<p>As it stands today soccer is implicitly not allowed in City of Edmonton recreational facility gyms.  We believe the new template for recreational facilities needs to have provisions for citizens to practice and play the overwhelmingly popular sport of Soccer.</p>";
-				break;
-			case '3':
-				$message .= "<p>Edmonton has a successful Professional Soccer Club called FC Edmonton founded in 2010, by Tom and Dave Fath. They have coordinated important events for our city including a memorial for Constable Daniel Woodall (a big soccer fan).  Their logo was designed with Edmonton colors in mind, and play in an Edmonton Eskimos branded facility.  We believe they need more support to be as successful as they should be in our sports crazy city.</p>";
-				break;
-			case '4':
-				$message .= "<p>We are already extremely behind in capacity for soccer facilities and we need to catch up in order to meet demand.  We also need to ensure that the success of facilities are not based on capacity alone, the facilities need to be accessible, affordable and of a high quality.  To achieve this ambitious but necessary result we need a comprehensive, well thought out and community engaged plan that will allow us to address issues such as boarded vs non.</p>";
-				break;
-			case '5':
-				$message .= "<p>I support collaboration with local Soccer clubs to meet the needs of the sport in Edmonton. There are several local clubs that are looking to develop indoor facilities for their teams because of the significant lack of indoor facilities in the Edmonton area.  They need your support.  There are a number of open minded leagues, clubs, facility operators that are willing to coordinate to serve the greater community in collaboration with government entities to make things happen in our wonderful winter city.</p>";
-				break;
-			default:
-				$message .= "This message sent by YEG Soccer on the behalf of the petitioner.";
-				break;
-		}
-
-	}
-	$message = $message . "<p>Sent at: " . current_time( 'mysql' ) . "</p>";
-	return $message;
-}
 
 // shortcode for user input form
 add_shortcode('show_pxe_form', 'pxe_create_form');

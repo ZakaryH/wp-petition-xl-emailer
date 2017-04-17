@@ -124,16 +124,20 @@ jQuery(document).ready( function($) {
     // show reps display
     jQuery("#rep-info-display").css( "display", "block" );
     display.append( "<p>Thank you for your support, the email has been sent to your local representatives.  Check your email for contact information for you to followup.</p>" );
-    //handle each rep
-    for( var j=0; j<repsData.length; j++ ){
-        display.append( "<div class='representative-info rep-" + ( j +1 ) + "'>" );
-        var innerDisplay = jQuery( ".rep-" + ( j+1 ) );
-        innerDisplay.append( "<div class='rep-photo-container'><img src='" + repsData[j].photo_url + "' class='rep-photo' alt='" + repsData[j].name + "'></div>" );
-        innerDisplay.append( "<p class='rep-name'>" + repsData[j].name + "</p>");
-        innerDisplay.append( "<p class='rep-position'>" + repsData[j].elected_office + "</p>");
-        innerDisplay.append( "<p class='rep-email'>" + repsData[j].email + "</p>");
-        display.append( "</div>");
+    
+    if (repsData.other) {
+      console.log("Non Edmonton submission");
+    } else {
+      //handle each rep
+      for( var j=0; j<repsData.length; j++ ){
+          display.append( "<div class='representative-info rep-" + ( j +1 ) + "'>" );
+          var innerDisplay = jQuery( ".rep-" + ( j+1 ) );
+          innerDisplay.append( "<div class='rep-photo-container'><img src='" + repsData[j].photo_url + "' class='rep-photo' alt='" + repsData[j].name + "'></div>" );
+          innerDisplay.append( "<p class='rep-name'>" + repsData[j].name + "</p>");
+          innerDisplay.append( "<p class='rep-position'>" + repsData[j].elected_office + "</p>");
+          innerDisplay.append( "<p class='rep-email'>" + repsData[j].email + "</p>");
+          display.append( "</div>");
+      }
     }
-
   }
 });
