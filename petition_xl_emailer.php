@@ -586,6 +586,10 @@ function pxe_postal_filter ($postalCode) {
     }
     // remove spaces
     $postalCode = preg_replace('/\s+/', '', $postalCode);
+    if ( strlen($postalCode) > 6 ) {
+    	return false;
+    }
+    
     if (preg_match($pattern, $postalCode)) {
 		return strtoupper( $postalCode );    
     }

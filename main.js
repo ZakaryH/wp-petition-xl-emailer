@@ -123,7 +123,7 @@ jQuery(document).ready( function($) {
     jQuery(".rep-petition-form").hide( "slow" );
     // show reps display
     jQuery("#rep-info-display").css( "display", "block" );
-    display.append( "<p>Thank you for your support, the email has been sent to your local representatives.  Check your email for contact information for you to followup.</p>" );
+    display.append( "<p class='success-message'>Thank you for your support, the email has been sent to your local representatives.  Check your email for contact information for you to followup.</p>" );
     
     if (repsData.other) {
       console.log("Non Edmonton submission");
