@@ -20,7 +20,6 @@ defined( 'ABSPATH' ) or exit;
 
 // TODO admin section
 // TODO cleanup & optimization
-// TODO add legend
 global $pxe_db_version;
 $pxe_db_version = '1.0';
 include_once( plugin_dir_path( __FILE__ ) . '/PHP_XLSXWriter-master/xlsxwriter.class.php');
@@ -698,41 +697,54 @@ function pxe_insert_petitioner ( $petitioner_data ) {
 }
 
 /**
-* TODO improve process
-* Inserts if new, replaces if already exists
+* Inserts if new, replaces if already exists & different
 * @param rep_data - associative array
 */
 function pxe_insert_representative ( $rep_data ) {
 	global $wpdb;
 	$table_name = $wpdb->prefix . 'pxe_representatives';
-	
-	$wpdb->replace( 
-		$table_name, 
-		array( 
-			'rep_name' => $rep_data['name'], 
-			'district_name' => $rep_data['district_name'], 
-			'office_and_district' => $rep_data['elected_office'] . '-' . $rep_data['district_name'], 
-			'elected_office' => $rep_data['elected_office'], 
-			'email' => $rep_data['email']
-		) 
-	);	
 
-	/* this is used to test a new rep replacing an old one
-	* they would have the same office and district, but different names etc.
-	* individually the office and district can be repeated, but the combination
-	* is unique
-	 */
+	$result = $wpdb->get_results(
+		"
+		SELECT rep_name, office_and_district 
+		FROM {$wpdb->prefix}pxe_representatives 
+		WHERE office_and_district = '" . $rep_data['elected_office'] . '-' . $rep_data['district_name'] . "'
+		", ARRAY_A
+	);
+	$num_rows = $wpdb->num_rows;
 
-	// $wpdb->replace( 
-	// 	$table_name, 
-	// 	array( 
-	// 		'rep_name' => 'Joe Dirt', 
-	// 		'district_name' => 'Ward 8', 
-	// 		'office_and_district' => 'CouncillorWard 8', 
-	// 		'elected_office' => 'Councillor', 
-	// 		'email' => $rep_data['email']
-	// 	) 
-	// );
+	if ($num_rows === 0) {
+		// doesn't exist
+		$wpdb->insert( 
+			$table_name, 
+			array( 
+				'office_and_district' => $rep_data['elected_office'] . '-' . $rep_data['district_name'],
+				'rep_name' => $rep_data['name'],
+				'district_name' => $rep_data['district_name'],
+				'elected_office' => $rep_data['elected_office'],
+				'email' => $rep_data['email']
+			) 
+		);
+	} else {
+		// exists
+		foreach ($result as $rep_row) {
+			// check if it's the same as what's being passed to this function
+			if ($rep_row['rep_name'] !== $rep_data['name']) {
+				$wpdb->update( 
+					$table_name, 
+					array( 
+						'rep_name' => $rep_data['name'],
+						'email' => $rep_data['email']
+					), 
+					array( 'office_and_district' => $rep_row['office_and_district'] ), 
+					array( 
+						'%s',
+						'%s'
+					)
+				);
+			}
+		}
+	}
 }
 
 /**
