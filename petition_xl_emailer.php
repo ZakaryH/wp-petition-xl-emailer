@@ -87,21 +87,21 @@ function pxe_activation() {
 	}
 }
 
-// add new time intervals (FOR TESTING)
-function pxe_cron_schedule_beta($schedules){
+// add new time intervals
+function pxe_cron_schedule($schedules){
     if(!isset($schedules["5min"])){
         $schedules["5min"] = array(
             'interval' => 5*60,
             'display' => __('Once every 5 minutes'));
     }
-    if(!isset($schedules["30min"])){
-        $schedules["30min"] = array(
-            'interval' => 30*60,
-            'display' => __('Once every 30 minutes'));
+    if(!isset($schedules["weekly"])){
+        $schedules["weekly"] = array(
+            'interval' => 604800,
+            'display' => __('Once every week'));
     }
     return $schedules;
 }
-add_filter('cron_schedules','pxe_cron_schedule_beta');
+add_filter('cron_schedules','pxe_cron_schedule');
 
 // register plugin deactivation function
 register_deactivation_hook( __FILE__, 'pxe_deactivation' );
@@ -181,10 +181,10 @@ function pxe_main_process() {
 // add the cron process
 add_action( 'pxe_weekly_event', 'pxe_cron_process' );
 
-// the actual script executed by CRON (wp-cron)
+// the script executed by CRON (wp-cron)
+// please forgive me, last minute fixed were made, 'other' conditions are workarounds
 function pxe_cron_process() {
 	global $wpdb;
-	// $table_name = $wpdb->prefix . 'pxe_petitioners';
 
 	// proceed only if at least 1 new petitioner exists
 	if ( pxe_new_exist() ) {
@@ -192,7 +192,8 @@ function pxe_cron_process() {
 		$districts_data = array(
 			"mp" => array(),
 			"mla" => array(),
-			"council" => array()
+			"council" => array(),
+			"other" => array()
 			);
 
 		$results = $wpdb->get_results(
@@ -216,7 +217,7 @@ function pxe_cron_process() {
 			foreach ($district as $district_name => $all_writing_rows) {
 				// only go through the process if that district has new petitioners
 				if ( count( $all_writing_rows['writing_rows_new'] ) > 0 ) {
-					// relies on the table names pretty heavily either way though
+					// get the index for the correct $emails email address
 					switch ($district_type) {
 						case 'council':
 							$email_index = "Councillor-$district_name";
@@ -233,15 +234,23 @@ function pxe_cron_process() {
 					$file_name = $district_type . "-" . $district_name;
 					$files_created[] = pxe_write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $file_name );
 
-					$to = 'yegfootball@gmail.com';
-					$subject = 'YEG Soccer Weekly Reminder';
-					$body = '<p>This is a reminder of the constituents in your area that have sent you an email of support for YEG Soccer in the past week, we have attached a file/image which shows historical and new supporters of YEG Soccer in your area.</p>';
-					$headers[] = 'Content-Type: text/html';
-					$headers[] = 'charset=UTF-8';
-					$mail_attachment = array( plugin_dir_path( __FILE__ ) . '/files/' . $file_name . '.xlsx');
-					wp_mail( $to, $subject, $body, $headers, $mail_attachment );
+					if ( ($district_type !== 'other') && ($district_name !== 'other') ) {
+						$to = 'yegfootball@gmail.com';
+						$subject = 'YEG Soccer Weekly Reminder';
+						$body = '<p>This is a reminder of the constituents in your area that have sent you an email of support for YEG Soccer in the past week, we have attached a file/image which shows historical and new supporters of YEG Soccer in your area.</p>' . '<p>' . $emails[$email_index][0] . '</p>';
+						$body .= '<b>Sheet "Messages" column legend</b>';
+						$body .= '<p>0: General support of the YEG Soccer cause</p>';
+						$body .= '<p>1: I believe the local soccer clubs need to work together to collaborate in improve the state of soccer in Edmonton</p>';
+						$body .= '<p>2: Include Soccer facilities in the City of Edmonton Recreation Facility Template</p>';
+						$body .= '<p>3: Commission of a 10 year plan for soccer facilities in the City of Edmonton</p>';
+						$body .= '<p>4: Support for FC Edmonton</p>';
+						$body .= '<p>5:  I support Edmonton becoming a host city in Canadas World Cup 2026 bid</p>';
+						$headers[] = 'Content-Type: text/html';
+						$headers[] = 'charset=UTF-8';
+						$mail_attachment = array( plugin_dir_path( __FILE__ ) . '/files/' . $file_name . '.xlsx');
+						wp_mail( $to, $subject, $body, $headers, $mail_attachment );
+					}
 				}
-				
 			}
 		}
 		// admin email
@@ -254,10 +263,12 @@ function pxe_cron_process() {
 		$mail_attachments = array();
 		// send all the new sheets with one email
 		foreach ($files_created as $created_file) {
-			$mail_attachments[] =  plugin_dir_path( __FILE__ ) . '/files/' . $created_file;
+			// workaround to not send these 3 files that are being created
+			if ( ($created_file !== 'mp-other.xlsx') && ($created_file !== 'mla-other.xlsx') && ($created_file !== 'council-other.xlsx') ) {
+				$mail_attachments[] =  plugin_dir_path( __FILE__ ) . '/files/' . $created_file;
+			}
 		}
 		wp_mail( $to, $subject, $body, $headers, $mail_attachments );
-
 		pxe_update_petitioners();
 		pxe_clean_up_files( $files_created );
 	} else {
@@ -359,12 +370,21 @@ function pxe_get_rep_emails() {
 */
 function pxe_add_district_structure( $district_types, $petitioner_data ) {
 	foreach ( $district_types as $dist_type => $district ) {
-		// add the structure for a district if that district isn't already in the district_types array
-		if ( !array_key_exists( $petitioner_data[$dist_type . '_district'], $district_types[$dist_type] ) ) {
-			$district_types[$dist_type] = array_merge( $district_types[$dist_type], array( $petitioner_data[$dist_type . '_district'] => array(
-			"writing_rows_new" => array(),
-			"writing_rows_old" => array()
-			) ) );
+		if ( ($dist_type !== 'other') && ($petitioner_data['mp_district'] !== 'other') ) {
+			// add the structure for a district if that district isn't already in the district_types array
+			if ( !array_key_exists( $petitioner_data[$dist_type . '_district'], $district_types[$dist_type] ) ) {
+				$district_types[$dist_type] = array_merge( $district_types[$dist_type], array( $petitioner_data[$dist_type . '_district'] => array(
+				"writing_rows_new" => array(),
+				"writing_rows_old" => array()
+				) ) );
+			}
+		} else {
+			if ( !array_key_exists( 'other', $district_types['other'] ) ) {
+				$district_types['other'] = array_merge( $district_types['other'], array( 'other' => array(
+				"writing_rows_new" => array(),
+				"writing_rows_old" => array()
+				) ) );
+			}
 		}
 	}
 	return $district_types;
@@ -380,9 +400,10 @@ function pxe_add_district_structure( $district_types, $petitioner_data ) {
 // add the old and new writings rows to the containing object
 function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 	foreach ($district_types as $dist_type => $district) {
+		if ( $dist_type !== 'other') {
+		// push each "new" petitioner to the "writing_rows_new" for each of their district_types
 		// TODO this is only going to be false if two people live in the same district and have the same name
 		// if (!in_array_r($petitioner['p_name'], $district_types[$dist_type][$petitioner[$dist_type . '_district']])) {
-			// push each "new" petitioner to the "writing_rows_new" for each of their district_types
 			$district_types[$dist_type][$petitioner[$dist_type . '_district']][$rows_age][] = array(
 				"first_name" => $petitioner['first_name'],
 				"last_name" => $petitioner['last_name'],
@@ -396,6 +417,20 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 				"formatted_address" => $petitioner['formatted_address']
 			);
 		// }
+		} elseif ( $petitioner['mp_district'] === 'other' ) {
+			$district_types['other']['other'][$rows_age][] = array(
+				"first_name" => $petitioner['first_name'],
+				"last_name" => $petitioner['last_name'],
+				"email" => $petitioner['email'],
+				"postal_code" => $petitioner['postal'],
+				"mla_district" => $petitioner['mla_district'],
+				"mp_district" => $petitioner['mp_district'],
+				"council_district" => $petitioner['council_district'],
+				"message" => $petitioner['message'],
+				"association" => $petitioner['association'],
+				"formatted_address" => $petitioner['formatted_address']
+			);
+		}
 	}
 	return $district_types;
 }
@@ -408,8 +443,8 @@ function pxe_add_writing_rows ( $district_types, $petitioner, $rows_age ) {
 * @return - string - name of the created file including the file extension (.xlxs)
 */
 function pxe_write_to_sheet( $writing_rows_new, $writing_rows_old, $filename ) {
-	$new_style = array( 'font'=>'Arial','font-size'=>10,'font-style'=>'bold', 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
-	$old_style = array( 'font'=>'Arial','font-size'=>10, 'fill'=>'#fff', 'halign'=>'center', 'border'=>'left,right,top,bottom');
+	$new_style = array( 'font'=>'Arial','font-size'=>10,'font-style'=>'bold', 'fill'=>'#eee', 'border'=>'left,right,top,bottom');
+	$old_style = array( 'font'=>'Arial','font-size'=>10, 'fill'=>'#fff', 'border'=>'left,right,top,bottom');
 	$header = array(
 		'First Name' => 'string',
 		'Last Name' => 'string',
