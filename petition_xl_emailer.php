@@ -82,7 +82,7 @@ function pxe_activation() {
 
 	// add the cron event
 	if (! wp_next_scheduled( 'pxe_weekly_event'  )) {
-		wp_schedule_event( time(), '5min', 'pxe_weekly_event' );
+		wp_schedule_event( time(), 'weekly', 'pxe_weekly_event' );
 	}
 }
 
@@ -234,9 +234,10 @@ function pxe_cron_process() {
 					$files_created[] = pxe_write_to_sheet( $all_writing_rows['writing_rows_new'], $all_writing_rows['writing_rows_old'], $file_name );
 
 					if ( ($district_type !== 'other') && ($district_name !== 'other') ) {
+						// $to = $emails[$email_index][0];
 						$to = 'yegfootball@gmail.com';
 						$subject = 'YEG Soccer Weekly Reminder';
-						$body = '<p>This is a reminder of the constituents in your area that have sent you an email of support for YEG Soccer in the past week, we have attached a file/image which shows historical and new supporters of YEG Soccer in your area.</p>' . '<p>' . $emails[$email_index][0] . '</p>';
+						$body = '<p>This is a notice of the constituents in your area that are in support of YEG Soccer for the past week, we have attached a file/image which shows historical and new supporters of YEG Soccer in your area.' . $emails[$email_index][0] . '</p>';
 						$body .= '<b>Sheet "Messages" column legend</b>';
 						$body .= '<p>0: General support of the YEG Soccer cause</p>';
 						$body .= '<p>1: I believe the local soccer clubs need to work together to collaborate in improve the state of soccer in Edmonton</p>';
@@ -589,7 +590,7 @@ function pxe_postal_filter ($postalCode) {
     if ( strlen($postalCode) > 6 ) {
     	return false;
     }
-    
+
     if (preg_match($pattern, $postalCode)) {
 		return strtoupper( $postalCode );    
     }
@@ -751,22 +752,6 @@ function pxe_insert_representative ( $rep_data ) {
 	}
 }
 
-/**
-* @param rep_set array : an array of associateive arrays of representatives
-* @param messages number : the value for the corresponding message
-*/
-// TODO make into a generic email function
-function pxe_send_email( $rep_set, $petitioner_data ) {
-		$to = 'yegfootball@gmail.com';
-		$subject = 'YEG Soccer Petition';
-		$body = $message_template;
-		$headers[] = 'Content-Type: text/html';
-		// $headers[] = 'Cc: same_ple_mail@mailinator.com';
-		$headers[] = 'charset=UTF-8';
-		// $headers = array( 'Content-Type: text/html; charset=UTF-8; Cc: same_ple_mail@mailinator.com;' );
-		wp_mail( $to, $subject, $body, $headers );
-}
-
 function pxe_send_error( $error_body, $user_data ) {
 	$to = 'yegfootball@gmail.com';
 	$subject = 'Form Error';
@@ -828,6 +813,7 @@ function pxe_create_form(){
 	<input type="hidden" value="<?php echo site_url(); ?>" id="siteUrl">
 	<div class="load-container"></div>
 	<div class="form-half first-half">
+		<div id="petition-error-div"></div>
 		<div class="form-group">
 			<label for="first_name">First Name*</label>
 			<input class="form-control" type="text" id="first_name" name="first_name" autocomplete="off" placeholder="Your first name" required>
@@ -875,7 +861,6 @@ function pxe_create_form(){
 			<p>Dear representative, I am a supporter of soccer and of YEG Soccer, I believe that the City, Province and Federal government need to do more to support the Worlds Beautiful Game.  There are inherent benefits to soccer for our society including health, public safety, leadership, and gender equality – and the good news is that 44% of all Canadian children are already big fans!  Help us use soccer as positive influence, it is already there, it is already popular we just need your support to use its already far reach to benefit our community even further.</p>
 		</div>
 	</div>
-	<div id="petition-error-div"></div>
 </form>
 <div id="rep-info-display" class="rep-petition-form">
 </div>

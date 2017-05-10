@@ -123,11 +123,12 @@ jQuery(document).ready( function($) {
     jQuery(".rep-petition-form").hide( "slow" );
     // show reps display
     jQuery("#rep-info-display").css( "display", "block" );
-    display.append( "<p class='success-message'>Thank you for your support, the email has been sent to your local representatives.  Check your email for contact information for you to followup.</p>" );
+    display.append( "<p class='success-message'>Thank you for your support. Be sure to follow us on social media and subscribe to our email newsletter to get all the latest updates on the YEG Soccer Project!</p>" );
     
     if (repsData.other) {
       console.log("Non Edmonton submission");
     } else {
+      display.append( "<p class='success-message'>If you'd like to follow up personally, feel free to reach out to your representatives listed below.</p>" );
       //handle each rep
       for( var j=0; j<repsData.length; j++ ){
           display.append( "<div class='representative-info rep-" + ( j +1 ) + "'>" );
